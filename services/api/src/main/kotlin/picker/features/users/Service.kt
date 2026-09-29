@@ -138,14 +138,7 @@ class UsersService(
     }
 
     suspend fun setEntry(userId: UUID, animeId: Long, request: EntryRequest, locale: AppLocale): AnimeSummary {
-        checkStatus(request.status)
-        request.score?.let {
-            if (it !in
-                1..MAX_SCORE
-            ) {
-                throw Errors.validation("score must be between 1 and $MAX_SCORE")
-            }
-        }
+        checkScore(request.status, request.score)
         val card = anime.summaries(listOf(animeId), locale, null).firstOrNull() ?: throw Errors.animeNotFound(animeId)
         users.setEntry(userId, animeId, request.status, request.score)
         syncExclusion(userId, animeId)
@@ -182,6 +175,14 @@ class UsersService(
         val slugs = values.map { it.trim().lowercase() }.distinct()
         slugs.firstOrNull { it !in known }?.let { throw Errors.validation("Unknown genre '$it' in $field") }
         return slugs
+    }
+
+    /** A score is an opinion of something seen; on `planned` the rec engine would read it as a like. */
+    private fun checkScore(status: String, score: Int?) {
+        checkStatus(status)
+        if (score == null) return
+        if (status == "planned") throw Errors.validation("A planned title can't have a score")
+        if (score !in 1..MAX_SCORE) throw Errors.validation("score must be between 1 and $MAX_SCORE")
     }
 
     private fun checkStatus(status: String) {

@@ -321,7 +321,7 @@ Details and Keycloak calls are in the Authentication section above.
 | `POST /users/me/logout-all` | End every Keycloak session of the user, returns `204` |
 | `POST /users/me/onboarding` | `{ "favorites": [ids], "likedGenres": [], "dislikedGenres": [] }`, returns `204`. Favorites (at most 50, all must exist) are stored as `completed` with score 9. Genre slugs must exist, and none can be both liked and disliked. Preferences replace earlier ones and mark onboarding complete. |
 | `GET /users/me/anime?status=planned&sort=added` | The user's list as `{ "items": [short cards], "total", "page", "size" }`. `sort` is `added` (newest first, the default), `score` (unrated last), or `length` (episodes, fewest first). Paged with `page` and `size`. |
-| `PUT /users/me/anime/{animeId}` | `{ "status": "completed", "score": 8 }`; `score` optional (1–10). Creates or replaces the entry and returns the short card with the new `userStatus`/`userScore` |
+| `PUT /users/me/anime/{animeId}` | `{ "status": "completed", "score": 8 }`; `score` optional (1–10), and not allowed with `planned`, since the rec engine would count it as a like. Creates or replaces the entry and returns the short card with the new `userStatus`/`userScore` |
 | `DELETE /users/me/anime/{animeId}` | Remove from list, `204` (also when it wasn't listed) |
 | `POST /users/me/feedback` | `{ "animeId": 1024, "kind": "not_interested" }` or `"skipped"` (sent on reroll), returns `204` |
 | `GET /users/me/recommendations?limit=20` | Personal feed, `{ "items": [recommendation] }`, `limit` 1–50 |

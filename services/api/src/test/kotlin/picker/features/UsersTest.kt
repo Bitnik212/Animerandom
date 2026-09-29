@@ -220,6 +220,16 @@ class UsersTest : ApiTest() {
         }
 
     @Test
+    fun `a planned title can't carry a score`() =
+        api { client ->
+            client.send("PUT", "/v1/users/me/anime/1", """{"status":"planned","score":8}""").obj().str("type") shouldBe
+                "validation-failed"
+            client.send("PUT", "/v1/users/me/anime/1", """{"status":"planned"}""").status shouldBe HttpStatusCode.OK
+            client.send("PUT", "/v1/users/me/anime/1", """{"status":"dropped","score":3}""").status shouldBe
+                HttpStatusCode.OK
+        }
+
+    @Test
     fun `list entry and feedback validation`() =
         api { client ->
             client.send("PUT", "/v1/users/me/anime/1", """{"status":"loved"}""").obj().str("type") shouldBe
