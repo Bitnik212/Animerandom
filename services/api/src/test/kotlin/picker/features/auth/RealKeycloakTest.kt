@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import picker.auth.KeycloakClient
 import picker.config.KeycloakConfig
+import picker.config.RateLimit
 import picker.support.ApiTest
 import picker.support.TestInfra
 import picker.support.bearer
@@ -41,6 +42,8 @@ class RealKeycloakTest : ApiTest() {
     private fun config() =
         testConfig {
             copy(
+                // One email goes through many limited calls here; the limiter has its own tests.
+                authRateLimitEmail = RateLimit(20, 60),
                 keycloak =
                     KeycloakConfig(
                         internalUrl = url,

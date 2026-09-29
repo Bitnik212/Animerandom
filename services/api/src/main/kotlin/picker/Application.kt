@@ -26,9 +26,11 @@ import org.koin.ktor.ext.get
 import org.koin.ktor.plugin.KoinIsolated
 import picker.auth.AUTH_USER
 import picker.auth.AppUserProvisioner
+import picker.auth.DeletedAccounts
 import picker.auth.EnsureAppUser
 import picker.auth.KeycloakClient
 import picker.auth.RateLimiter
+import picker.auth.UserPrincipal
 import picker.auth.installTokenValidation
 import picker.auth.keycloakJwks
 import picker.config.AppConfig
@@ -83,8 +85,9 @@ fun appModule(config: AppConfig): Module =
         single { MetaService(get()) }
         single { KeycloakClient(config.keycloak, get()) }
         single { RateLimiter(get()) }
+        single { DeletedAccounts(get()) }
         single { AuthService(config, get(), get(), get(), AppLocale.fromTag(config.defaultLocale) ?: AppLocale.EN) }
-        single { AccountService(config, get(), get(), get(), get()) }
+        single { AccountService(config, get(), get(), get(), get(), get()) }
         single<List<HealthCheck>> {
             healthChecks(get(), get(), get(), config.elasticsearchUrl, config.keycloak.certsUrl, config.recEngineUrl)
         }
@@ -114,7 +117,15 @@ fun Application.configure(config: AppConfig, overrides: Module? = null) {
 
     val defaultLocale = AppLocale.fromTag(config.defaultLocale) ?: AppLocale.EN
     val users = get<UserRepository>()
-    val provisioner = AppUserProvisioner { principal -> users.ensure(principal.id, defaultLocale.key) }
+    val deleted = get<DeletedAccounts>()
+    val provisioner =
+        object : AppUserProvisioner {
+            override suspend fun ensure(principal: UserPrincipal) {
+                users.ensure(principal.id, defaultLocale.key)
+            }
+
+            override suspend fun isDeleted(userId: UUID) = deleted.isDeleted(userId)
+        }
 
     // Close through direct references: the container may already be stopped by then.
     val closeables = listOf<AutoCloseable>(get<Db>(), get<Redis>(), get<HttpClient>())

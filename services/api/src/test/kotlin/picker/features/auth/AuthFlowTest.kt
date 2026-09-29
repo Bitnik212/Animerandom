@@ -257,6 +257,21 @@ class AuthFlowTest : ApiTest() {
         }
 
     @Test
+    fun `forgot password is limited per email, whatever the address`() =
+        api(testConfig { copy(authRateLimitEmail = RateLimit(2, 60)) }) { client ->
+            KeycloakStubs.serviceAccount()
+            KeycloakStubs.findByEmail("victim@example.com", null)
+            repeat(2) {
+                client.postJson("/v1/auth/password/forgot", """{"email":"victim@example.com"}""").status shouldBe
+                    HttpStatusCode.Accepted
+            }
+            client.postJson("/v1/auth/password/forgot", """{"email":"Victim@Example.com"}""").status shouldBe
+                HttpStatusCode.TooManyRequests
+            client.postJson("/v1/auth/password/forgot", """{"email":"other@example.com"}""").status shouldBe
+                HttpStatusCode.Accepted
+        }
+
+    @Test
     fun `the service-account token is reused until it nearly expires`() =
         api { client ->
             KeycloakStubs.serviceAccount()

@@ -116,6 +116,8 @@ class AuthService(
     suspend fun forgotPassword(request: ForgotPasswordRequest, ip: String) {
         val email = runCatching { Validation.email(request.email) }.getOrNull() ?: return
         limiter.hit(Keys.authRateIp(ip), config.authRateLimitIp)
+        // Per email too, so nobody can flood one inbox from many addresses.
+        limiter.hit(Keys.authRateEmail(email), config.authRateLimitEmail)
         try {
             keycloak.findUserIdByEmail(email)?.let { keycloak.executeActionsEmail(it, listOf("UPDATE_PASSWORD")) }
         } catch (e: ApiException) {

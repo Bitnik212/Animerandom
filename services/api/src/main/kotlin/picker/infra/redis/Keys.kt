@@ -30,6 +30,8 @@ object Keys {
 
     fun randomScratch(id: UUID = UUID.randomUUID()) = "tmp:rand:$id"
 
+    fun deletedUser(userId: UUID) = "deleted:user:$userId"
+
     fun authRateIp(ip: String) = "ratelimit:auth:ip:$ip"
 
     fun authRateEmail(email: String) = "ratelimit:auth:email:${sha256(email.trim().lowercase())}"

@@ -274,7 +274,8 @@ Everything in Redis is derived and can be rebuilt. Losing Redis costs latency, n
 | `user:{uuid}:excluded` | set | api | Watched + not interested IDs | 24 h, rebuilt on miss |
 | `cache:anime:{id}:{locale}` | string (JSON) | api | Localized anime card | 1 h |
 | `tmp:rand:{uuid}` | set | api | Intersection scratch space | 10 s |
-| `ratelimit:auth:*` | string | api | Sign-in and sign-up attempt counters | window length |
+| `ratelimit:auth:*` | sorted set | api | Auth attempt timestamps (sliding window) | window length |
+| `deleted:user:{uuid}` | string | api | Tombstone of a deleted account; its still-valid tokens get `401` instead of re-creating the app row | 1 h |
 | `ratelimit:source:{name}` | hash | ingest-worker | Shared token bucket per external source | none |
 | `lock:ingest:run` | string | ingest-worker | Prevents overlapping runs | 6 h |
 

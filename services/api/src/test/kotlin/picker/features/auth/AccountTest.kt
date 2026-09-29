@@ -9,6 +9,7 @@ import com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath
 import com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import com.github.tomakehurst.wiremock.client.WireMock.putRequestedFor
 import com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
+import io.kotest.matchers.longs.shouldBeInRange
 import io.kotest.matchers.shouldBe
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -48,6 +49,7 @@ class AccountTest : ApiTest() {
         api { client ->
             KeycloakStubs.serviceAccount()
             KeycloakStubs.passwordGrant()
+            KeycloakStubs.logout()
             KeycloakStubs.ok("PUT", "$ADMIN/users/$id/reset-password")
             val response =
                 client.put("/v1/users/me/password") {
@@ -60,6 +62,12 @@ class AccountTest : ApiTest() {
                 postRequestedFor(
                     urlEqualTo(KeycloakStubs.TOKEN),
                 ).withRequestBody(containing("username=me%40example.com")),
+            )
+            // The verification grant's session is ended right away.
+            kc.verify(
+                postRequestedFor(
+                    urlEqualTo(KeycloakStubs.LOGOUT),
+                ).withRequestBody(containing("refresh_token=refresh-token")),
             )
             kc.verify(
                 putRequestedFor(urlEqualTo("$ADMIN/users/$id/reset-password"))
@@ -113,6 +121,14 @@ class AccountTest : ApiTest() {
                 listOf(mapOf("n" to 0L))
             Redis(TestInfra.redisUrl).use { runBlocking { it.commands.exists(Keys.userExcluded(id)) } } shouldBe 0L
             kc.verify(deleteRequestedFor(urlEqualTo("$ADMIN/users/$id")))
+
+            // The access token is still valid for minutes, but it can't bring the account back.
+            val leftover = client.get("/v1/meta/genres") { bearer(FakeKeycloak.token(sub = id)) }
+            leftover.status shouldBe HttpStatusCode.Unauthorized
+            TestInfra.sql("SELECT count(*) AS n FROM app.app_user WHERE id = '$id'") shouldBe listOf(mapOf("n" to 0L))
+            Redis(TestInfra.redisUrl).use { runBlocking { it.commands.ttl(Keys.deletedUser(id)) } }!! shouldBeInRange
+                3500L..3600L
+            client.get("/v1/meta/genres").status shouldBe HttpStatusCode.OK // anonymous use still works
         }
 
     @Test

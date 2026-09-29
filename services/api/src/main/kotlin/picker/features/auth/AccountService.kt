@@ -1,6 +1,8 @@
 package picker.features.auth
 
 import kotlinx.serialization.Serializable
+import org.slf4j.LoggerFactory
+import picker.auth.DeletedAccounts
 import picker.auth.KeycloakClient
 import picker.auth.RateLimiter
 import picker.auth.UserPrincipal
@@ -36,17 +38,25 @@ class AccountService(
     private val users: UserRepository,
     private val redis: Redis,
     private val limiter: RateLimiter,
+    private val deleted: DeletedAccounts,
 ) {
+    private val log = LoggerFactory.getLogger(AccountService::class.java)
+
     /** Verifies the current password with a password grant, then resets it. */
     suspend fun changePassword(principal: UserPrincipal, request: ChangePasswordRequest) {
         Validation.password(request.newPassword)
         val email = principal.email ?: keycloakEmail(principal.id)
         limiter.hit(Keys.authRateEmail(email), config.authRateLimitEmail)
-        try {
-            keycloak.passwordGrant(email, request.currentPassword)
-        } catch (e: ApiException) {
-            if (e.type == "invalid-credentials") throw Errors.invalidCredentials()
-            throw e
+        val check =
+            try {
+                keycloak.passwordGrant(email, request.currentPassword)
+            } catch (e: ApiException) {
+                if (e.type == "invalid-credentials") throw Errors.invalidCredentials()
+                throw e
+            }
+        // The check opened a real session; end it, or it lingers for the whole SSO idle timeout.
+        check.refreshToken?.let { token ->
+            runCatching { keycloak.logout(token) }.onFailure { log.warn("Could not end the verification session") }
         }
         keycloak.resetPassword(principal.id, request.newPassword)
     }
@@ -58,12 +68,14 @@ class AccountService(
 
     /**
      * App rows in one transaction, then `user:{id}:*` in Redis, then the Keycloak user.
-     * Every step is idempotent, so a client retries after a 502.
+     * Every step is idempotent, so a client retries after a 502. Only once everything is gone does
+     * the tombstone go up, so leftover tokens can't re-create the app row (and a retry isn't blocked).
      */
     suspend fun deleteAccount(userId: UUID) {
         users.deleteAll(userId)
         redis.deleteUserKeys(userId)
         keycloak.deleteUser(userId)
+        deleted.mark(userId)
     }
 
     suspend fun adminView(userId: UUID): AdminUserView {
