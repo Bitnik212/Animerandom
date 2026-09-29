@@ -13,13 +13,25 @@ from pipeline.http import ItemFailed, SourceClient
 SOURCE = "annict"
 BATCH_SIZE = 50
 
-WORKS_QUERY = """
+WORK_FIELDS = "annictId title titleEn titleKana titleRo malAnimeId seasonYear media episodesCount"
+
+WORKS_QUERY = (
+    """
 query ($ids: [Int!], $first: Int) {
-  searchWorks(annictIds: $ids, first: $first) {
-    nodes { annictId title titleEn titleKana titleRo malAnimeId }
-  }
-}
-"""
+  searchWorks(annictIds: $ids, first: $first) { nodes { """
+    + WORK_FIELDS
+    + """ } }
+}"""
+)
+
+SEARCH_QUERY = (
+    """
+query ($titles: [String!], $first: Int) {
+  searchWorks(titles: $titles, first: $first) { nodes { """
+    + WORK_FIELDS
+    + """ } }
+}"""
+)
 
 
 class Work(BaseModel):
@@ -31,6 +43,9 @@ class Work(BaseModel):
     titleKana: str | None = None
     titleRo: str | None = None
     malAnimeId: str | None = None
+    seasonYear: int | None = None
+    media: str | None = None
+    episodesCount: int | None = None
 
 
 def enabled() -> bool:
@@ -46,11 +61,15 @@ def client() -> SourceClient:
 
 
 def fetch_works(c: SourceClient, annict_ids: list[int]) -> list[dict]:
-    response = c.request(
-        "POST",
-        "",
-        json={"query": WORKS_QUERY, "variables": {"ids": annict_ids, "first": len(annict_ids)}},
-    )
+    return _works(c, WORKS_QUERY, {"ids": annict_ids, "first": len(annict_ids)})
+
+
+def search_works(c: SourceClient, title: str, limit: int = 10) -> list[dict]:
+    return _works(c, SEARCH_QUERY, {"titles": [title], "first": limit})
+
+
+def _works(c: SourceClient, query: str, variables: dict) -> list[dict]:
+    response = c.request("POST", "", json={"query": query, "variables": variables})
     body = response.json()
     if body.get("errors"):
         raise ItemFailed(SOURCE, 400, "; ".join(str(e.get("message")) for e in body["errors"]))

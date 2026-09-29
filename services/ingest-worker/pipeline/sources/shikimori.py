@@ -34,13 +34,29 @@ def client() -> SourceClient:
     return SourceClient(SOURCE, settings.SHIKIMORI_URL, headers={"Accept": "application/json"})
 
 
-def fetch_by_mal_id(c: SourceClient, mal_id: int) -> dict[str, Any] | None:
-    """Returns the raw anime payload, or None when Shikimori has no such entry."""
+def fetch_by_id(c: SourceClient, shikimori_id: int | str) -> dict[str, Any] | None:
+    """Returns the raw anime payload, or None when Shikimori has no such entry.
+    Shikimori ids equal MAL ids for almost every entry."""
     try:
-        response = c.request("GET", f"/animes/{mal_id}")
+        response = c.request("GET", f"/animes/{shikimori_id}")
     except ItemFailed as exc:
         if exc.status == 404:
             return None
         raise
     payload: dict[str, Any] = response.json()
     return payload
+
+
+fetch_by_mal_id = fetch_by_id
+
+
+def search(
+    c: SourceClient, text: str, *, adult: bool = False, limit: int = 10
+) -> list[dict[str, Any]]:
+    """Title search; returns short entries (id, name, russian, kind, episodes, aired_on)."""
+    params: dict[str, Any] = {"search": text, "limit": limit}
+    if adult:
+        params["censored"] = "false"
+    response = c.request("GET", "/animes", params=params)
+    results: list[dict[str, Any]] = response.json()
+    return results

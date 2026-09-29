@@ -174,6 +174,10 @@ From the repo root: `docker compose run --rm ingest-migrate`, then `docker compo
 | `RATE_SHIKIMORI_PER_MIN` | `60` | |
 | `RATE_ANNICT_PER_MIN` | `30` | |
 | `INCREMENTAL_DAYS` | `3` | How far back an incremental run looks |
+| `VECTOR_MATCH_ACCEPT`, `VECTOR_MATCH_MARGIN`, `VECTOR_MATCH_REVIEW` | `0.80`, `0.08`, `0.60` | Vector matching thresholds (see Map IDs) |
+| `VECTOR_RECHECK_DAYS` | `30` | How long an unmatched anime waits before it is searched again |
+| `VECTOR_RECHECK_SPREAD_DAYS` | `7` | Adds 0 to 6 days by AniList id, so rechecks don't all come due on one run |
+| `VECTOR_SEARCHES_PER_RUN` | `300` | Title searches per run and source; the backlog drains over later runs. Refresh runs are not capped. |
 | `KEYCLOAK_INTERNAL_URL`, `KEYCLOAK_ISSUER`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID` | same as the API | For validating tokens on the ninja API |
 
 ## Celery design
@@ -286,7 +290,7 @@ Errors use the same `application/problem+json` shape as the main API, with types
 Available at `/admin` on `ingest-web`, with local Django superusers (not Keycloak accounts).
 
 - **Anime:** search by any title, see localizations with source and machine flags, see raw payloads per source side by side. Catalog data is read-only here except overrides.
-- **Overrides:** fix a wrong value permanently. An `anime_override` row (`anime_id`, `field`, `locale`, `value`, `note`) beats every source during merge. Saving an override enqueues a refresh of that anime.
+- **Overrides:** fix a wrong value permanently. An `anime_override` row (`anime_id`, `field`, `locale`, `value`, `note`) beats every source during merge. Saving an override enqueues a refresh of that anime. Overrides of `mal_id`, `shikimori_id`, and `annict_id` also steer fetching, which is how `review` items from vector matching get resolved.
 - **Runs:** stage progress, counts, item errors, links to Flower.
 - **Periodic tasks:** enable, disable, or reschedule runs.
 - **Vocabulary:** read-only view of genres and tags. The YAML files stay the source of truth, so translations are reviewed in git.
@@ -308,6 +312,26 @@ AniList id ──(AniList's idMal)──> MAL id ──(same id)──> Shikimor
 ```
 
 `manami-snapshot.json.gz` fills gaps where AniList has no `idMal` (it holds only the AniList → MAL pairs from the final release). Both cross-references are loaded into `ingest.pipeline_idsourceentry`: arm by the weekly schedule, manami from the committed file. The resolved ids per anime live in `ingest.pipeline_idmapping`. The snapshot is frozen because the upstream project was archived in July 2026; new anime rely on AniList and arm only. When sources disagree on a mapping, AniList's `idMal` wins and the conflict is logged on the run.
+
+**Vector matching fills what the cross-references miss** (`pipeline/idmap/vector.py`). An anime with no MAL id, or no Annict id, gets one title search on that source inside its fetch task (same queue, same token bucket):
+
+- Shikimori is searched with the romaji title, Annict with the Japanese one.
+- Each candidate becomes a feature vector: title similarity, year, format, and episode count.
+  - Title similarity is the best cosine similarity between character-bigram and trigram vectors of any title pair. It's multiplied by 0.8 when the titles contain different numbers (Season 2 vs Season 3). An AniList entry with only a Japanese title also gets a generated romaji variant.
+  - Formats are normalized across sources (AniList `ONA` = Shikimori `ona` = Annict `WEB`).
+  - A missing value scores 0.5.
+- The weighted score (0.65, 0.15, 0.10, 0.10) decides:
+  - **≥ `VECTOR_MATCH_ACCEPT` (0.80) and ahead of the runner-up by `VECTOR_MATCH_MARGIN` (0.08):** accepted. The id is stored with `via = vector` and its score. Shikimori matches are then fetched in full, and their `myanimelist_id` becomes the MAL id.
+  - **Between `VECTOR_MATCH_REVIEW` (0.60) and accept:** not guessed. The run gets a `review` item listing the top candidates with their feature vectors. Fix it with an override (below).
+  - **Below that:** nothing.
+- On Annict, a work whose own `malAnimeId` equals the anime's MAL id is accepted without scoring.
+- A search runs at most once per `VECTOR_RECHECK_DAYS` (30) per anime and source, plus a per-anime offset of up to `VECTOR_RECHECK_SPREAD_DAYS` (7). A refresh of that anime searches again.
+- Each run does at most `VECTOR_SEARCHES_PER_RUN` (300) searches per source. When the limit is hit the run logs a `skipped` item, and the backlog drains over later runs. The first runs after arm or a source change are the ones that hit it.
+
+Precedence, highest first:
+1. An admin override of `mal_id`, `shikimori_id`, or `annict_id` (an `anime_override` row without locale). A `shikimori_id` override is fetched directly instead of by MAL id.
+2. The cross-references above.
+3. A vector match. It's kept on later runs only while no cross-reference knows the anime.
 
 ### 3. Merge
 
