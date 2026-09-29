@@ -13,9 +13,9 @@ It never calls external anime APIs and never writes catalog data. Anything that 
 | Serialization | kotlinx.serialization |
 | Database | Exposed (DSL, not DAO) + HikariCP |
 | Migrations | Flyway, for the `app` schema only, applied at startup |
-| Search | Official Elasticsearch Java client |
+| Search | Elasticsearch REST API over the Ktor client; queries are JSON built in `infra/es/` (easy to read next to the ES docs, and stubbed with WireMock in tests) |
 | Redis | Lettuce (coroutines API) |
-| HTTP client (rec engine, Keycloak) | Ktor client (CIO) |
+| HTTP client (rec engine, Keycloak, Elasticsearch) | Ktor client (CIO) |
 | Auth | `ktor-server-auth-jwt` + `com.auth0:jwks-rsa` for token validation; Keycloak token endpoint and Admin REST API through a small Ktor-client wrapper |
 | DI | Koin |
 | Tests | JUnit 5, Kotest assertions, Testcontainers |
@@ -32,9 +32,9 @@ services/api/
 │   ├── config/                    typed config from env
 │   ├── features/
 │   │   ├── auth/                  sign-up, sign-in, refresh, sign-out, password reset
-│   │   ├── anime/                 details, similar
+│   │   ├── anime/                 cards (localization, cache), details, similar
 │   │   ├── random/                random picks, pool resolution
-│   │   ├── search/                search, suggest, facets
+│   │   ├── search/                search, suggest, facets, filters shared with random
 │   │   ├── users/                 profile, statuses, ratings, feedback, watchlist
 │   │   ├── recommendations/       feed assembly from rec-engine results
 │   │   └── meta/                  genres, tags
@@ -238,14 +238,14 @@ The shape returned everywhere an anime appears:
 }
 ```
 
-List endpoints return a shorter card without `synopsis`.
+List endpoints return a shorter card without `synopsis`. `titleLocale` and `synopsisLocale` are BCP 47 tags (`ja-Latn`) of the text actually shown, or `null` when no text exists in the chain. A title missing from the whole chain falls back to any language the anime has. `userStatus` and `userScore` are filled for a signed-in user's own list entries.
 
 ### Catalog
 
 | Method and path | Purpose |
 |---|---|
-| `GET /anime/{id}` | Full card plus tags, studios, and relations |
-| `GET /anime/{id}/similar?limit=20` | "More like this", from the rec engine's similarity endpoint |
+| `GET /anime/{id}` | Full card plus `tags` (`slug`, `name`, `rank`, `spoiler`; by rank), `studios` (`name`, `main`), and `relations` (`kind` and a short `anime` card; adult titles only with `showAdult`), all in one object. `REMOVED` anime still resolve, so old list entries keep working. |
+| `GET /anime/{id}/similar?limit=20` | "More like this" from the rec engine, `{ "items": [short cards] }` in the engine's order. `limit` 1–50. If the engine errors or exceeds `REC_ENGINE_TIMEOUT_MS`, `items` is empty rather than an error. |
 | `GET /anime/random` | Random pick, see below |
 | `GET /meta/genres` | All genres with localized names |
 | `GET /meta/tags?q=` | Tags with localized names, optional prefix filter |
@@ -259,24 +259,30 @@ List endpoints return a shorter card without `synopsis`.
 | `genre` | `genre=action&genre=drama` | Repeatable, all must match |
 | `excludeGenre` | `excludeGenre=horror` | Repeatable |
 | `format` | `TV` | One of the format values |
-| `minScore` | `7` | Rounded down to a pool bucket: 6, 7, 8, 9 |
+| `minScore` | `7` | Rounded down to a pool bucket: 6, 7, 8, 9 (above 9 uses 9). Below 6 there's no bucket, so it goes to Elasticsearch |
 | `decade` | `2010s` | |
 | `length` | `short` | `short`, `medium`, `long` |
-| `hideWatched` | `true` | Default `true` for authenticated requests |
+| `hideWatched` | `true` | Default `true` for authenticated requests; ignored for anonymous ones |
 | `count` | `1` | 1–10 distinct picks |
 | `yearFrom`, `yearTo`, `tag` | | Not pooled; triggers the Elasticsearch path |
-| `source` | `watchlist` | Pick from the user's `planned` list instead of the catalog |
+| `source` | `watchlist` | Pick from the user's `planned` list instead of the catalog (default `catalog`). Needs a token (`401` otherwise); the other filters still apply |
 
-Returns `{ "items": [card, …], "poolSize": 1234 }`. `poolSize` lets the client say "1,234 anime match your filters". An empty pool returns `200` with no items, not an error.
+Returns `{ "items": [short card, …], "poolSize": 1234 }`. `poolSize` lets the client say "1,234 anime match your filters". An empty pool returns `200` with no items, not an error. If the Elasticsearch path is needed and Elasticsearch is down, the answer is `503 search-unavailable`.
 
 ### Search
 
 | Method and path | Purpose |
 |---|---|
 | `GET /search` | Full search with filters and facets |
-| `GET /search/suggest?q=atta` | Up to 8 title suggestions, any script |
+| `GET /search/suggest?q=atta` | Up to 8 prefix matches in any script, as `{ "items": [short cards] }`. `q` is 1–100 characters |
 
 `GET /search` params: `q`, `genre`, `excludeGenre`, `tag`, `excludeTag`, `format`, `status`, `yearFrom`, `yearTo`, `minScore`, `episodesMin`, `episodesMax`, `hideWatched`, `sort` (`relevance` default when `q` is set, otherwise `popularity`; also `score`, `newest`), `page`, `size`.
+
+- `genre`, `tag`, and their `exclude` forms are repeatable slugs. A result must have every `genre` and `tag`.
+- `format` and `status` are repeatable, and any one of them matches.
+- `hideWatched` defaults to `false` here, and only applies with a token.
+- `page × size` is capped at 10,000.
+- `REMOVED` titles never appear. Adult titles appear only for users with `showAdult`.
 
 Response:
 
@@ -352,6 +358,11 @@ Recommendation items are cards plus a localized reason:
 
 `user:{id}:excluded` is rebuilt from Postgres on a cache miss and updated in place whenever the user changes a status or sends `not_interested`.
 
+- "Watched" means `watching`, `completed`, or `dropped`. `planned` titles stay pickable, since picking from them is the point of a watchlist.
+- Redis can't store an empty set, so the set always holds the member `0` (catalog IDs start at 1). That way a user with nothing excluded doesn't trigger a rebuild on every request.
+- In-place updates only touch an existing set, atomically in a Lua script. They never create a set with no TTL.
+- Scratch keys (`tmp:rand:*`, and one for the watchlist when `source=watchlist`) are deleted after each pick. The 10 s TTL only covers a crash mid-request.
+
 ## Search
 
 - A query searches every title field in every language, plus synonyms, regardless of the UI locale. Matches in the user's locale get a small boost so they rank first on ties.
@@ -397,6 +408,7 @@ Mapped in `errors/`. Stable `type` values:
 | `anime-not-found` | 404 |
 | `unsupported-locale` | 400 |
 | `identity-provider-unavailable` | 502 (Keycloak Admin API failed or timed out) |
+| `search-unavailable` | 503 (Elasticsearch failed or unreachable, on search and on random picks that need it) |
 | `internal` | 500 |
 
 ## Testing
@@ -418,7 +430,20 @@ Mapped in `errors/`. Stable `type` values:
 - `RealKeycloakTest` runs the same flows end to end against a real Keycloak with the committed realm imported: signup, the password policy, the audience mapper, password change, refresh and sign-out, service-account permissions, admin view, and deletion. It's skipped unless `API_TEST_KEYCLOAK_URL` and `API_TEST_KEYCLOAK_SECRET` are set; `API_TEST_KEYCLOAK_ISSUER` defaults to `{url}/realms/anime-picker`. CI doesn't run it yet.
 - The fixture catalog (`src/test/resources/fixtures/`, 12 anime) has deliberately missing translations, to exercise the fallbacks.
 - The rec engine tests load this service's Flyway migrations for `app`, so a migration that breaks them fails their CI job too.
-- Not done yet: Testcontainers (tests use externally provided services), a real Keycloak in CI, and the WireMock stubs for the rec engine and Elasticsearch. Those arrive with the features that use them.
+- Elasticsearch and the rec engine are WireMock stubs on the same server (`support/CatalogStubs.kt`). Tests seed the `pool:*` sets the way the ingest worker builds them from the fixture catalog. They cover:
+  - cards: localization and fallbacks, the per-locale cache, and user fields
+  - details and relations
+  - similar: engine order, `includeAdult`, and degrading to an empty list on errors and timeouts
+  - random:
+    - pool intersection, subtraction, and every pooled filter
+    - exclusions and the empty-set sentinel
+    - the watchlist source
+    - scratch-key cleanup
+    - the Elasticsearch path (the query it sends, and adult opt-in)
+    - `503` when Elasticsearch is down
+    - validation
+  - search: the text query, the locale boost, post-filters and facet filters, paging, sorting, `hideWatched`, localized facets, and suggest
+- Not done yet: Testcontainers (tests use externally provided services), a real Keycloak and a real Elasticsearch in CI (the search tests check the query JSON the API sends, not Elasticsearch's ranking).
 
 ## Rules
 

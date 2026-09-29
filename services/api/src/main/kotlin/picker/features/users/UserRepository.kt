@@ -2,6 +2,7 @@ package picker.features.users
 
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNotNull
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -15,6 +16,12 @@ import picker.infra.db.tx
 import java.util.UUID
 
 data class UserStats(val listSize: Long, val ratings: Long)
+
+/** The signed-in user's list entry for an anime. */
+data class UserEntry(val status: String, val score: Int?)
+
+/** List statuses that count as "watched" for `hideWatched`; `planned` stays pickable. */
+val WATCHED_STATUSES = listOf("watching", "completed", "dropped")
 
 class UserRepository(private val db: Db) {
     /** `INSERT … ON CONFLICT DO NOTHING`: safe to call for every first request of a user. */
@@ -71,5 +78,54 @@ class UserRepository(private val db: Db) {
                     .where { (UserAnimeTable.userId eq id) and UserAnimeTable.score.isNotNull() }
                     .count()
             UserStats(list, rated)
+        }
+
+    suspend fun showAdult(id: UUID): Boolean =
+        db.tx {
+            AppUserTable
+                .selectAll()
+                .where { AppUserTable.id eq id }
+                .limit(1)
+                .map { it[AppUserTable.showAdult] }
+                .firstOrNull() ?: false
+        }
+
+    /** The user's entries for [animeIds] (for `userStatus` / `userScore` on cards). */
+    suspend fun entries(id: UUID, animeIds: Collection<Long>): Map<Long, UserEntry> {
+        if (animeIds.isEmpty()) return emptyMap()
+        return db.tx {
+            UserAnimeTable
+                .selectAll()
+                .where { (UserAnimeTable.userId eq id) and (UserAnimeTable.animeId inList animeIds) }
+                .associate {
+                    it[UserAnimeTable.animeId] to
+                        UserEntry(it[UserAnimeTable.status], it[UserAnimeTable.score]?.toInt())
+                }
+        }
+    }
+
+    /** Watched (see [WATCHED_STATUSES]) plus `not_interested`: the source of `user:{id}:excluded`. */
+    suspend fun excludedIds(id: UUID): Set<Long> =
+        db.tx {
+            val watched =
+                UserAnimeTable
+                    .selectAll()
+                    .where { (UserAnimeTable.userId eq id) and (UserAnimeTable.status inList WATCHED_STATUSES) }
+                    .map { it[UserAnimeTable.animeId] }
+            val notInterested =
+                UserFeedbackTable
+                    .selectAll()
+                    .where { (UserFeedbackTable.userId eq id) and (UserFeedbackTable.kind eq "not_interested") }
+                    .map { it[UserFeedbackTable.animeId] }
+            (watched + notInterested).toSet()
+        }
+
+    suspend fun plannedIds(id: UUID): Set<Long> =
+        db.tx {
+            UserAnimeTable
+                .selectAll()
+                .where { (UserAnimeTable.userId eq id) and (UserAnimeTable.status eq "planned") }
+                .map { it[UserAnimeTable.animeId] }
+                .toSet()
         }
 }

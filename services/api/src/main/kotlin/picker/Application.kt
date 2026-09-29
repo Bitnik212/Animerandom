@@ -35,6 +35,9 @@ import picker.auth.installTokenValidation
 import picker.auth.keycloakJwks
 import picker.config.AppConfig
 import picker.errors.installProblems
+import picker.features.anime.AnimeRepository
+import picker.features.anime.AnimeService
+import picker.features.anime.animeRoutes
 import picker.features.auth.AccountService
 import picker.features.auth.AuthService
 import picker.features.auth.accountRoutes
@@ -46,9 +49,16 @@ import picker.features.meta.metaRoutes
 import picker.features.ops.HealthCheck
 import picker.features.ops.healthChecks
 import picker.features.ops.opsRoutes
+import picker.features.random.RandomService
+import picker.features.random.randomRoutes
+import picker.features.search.SearchService
+import picker.features.search.searchRoutes
+import picker.features.users.Exclusions
 import picker.features.users.UserRepository
 import picker.i18n.AppLocale
 import picker.infra.db.Db
+import picker.infra.es.Es
+import picker.infra.rec.RecEngineClient
 import picker.infra.redis.Redis
 import java.util.UUID
 
@@ -88,6 +98,13 @@ fun appModule(config: AppConfig): Module =
         single { DeletedAccounts(get()) }
         single { AuthService(config, get(), get(), get(), AppLocale.fromTag(config.defaultLocale) ?: AppLocale.EN) }
         single { AccountService(config, get(), get(), get(), get(), get()) }
+        single { Es(get(), config.elasticsearchUrl) }
+        single { RecEngineClient(get(), config.recEngineUrl, config.recEngineTimeoutMs) }
+        single { Exclusions(get(), get()) }
+        single { AnimeRepository(get()) }
+        single { AnimeService(get(), get(), get(), get(), get()) }
+        single { RandomService(get(), get(), get(), get(), get()) }
+        single { SearchService(get(), get(), get(), get(), get()) }
         single<List<HealthCheck>> {
             healthChecks(get(), get(), get(), config.elasticsearchUrl, config.keycloak.certsUrl, config.recEngineUrl)
         }
@@ -138,6 +155,9 @@ fun Application.configure(config: AppConfig, overrides: Module? = null) {
             authRoutes(get())
             publicRoutes(provisioner) {
                 metaRoutes(get(), users, defaultLocale)
+                randomRoutes(get(), users, defaultLocale)
+                animeRoutes(get(), users, defaultLocale)
+                searchRoutes(get(), users, defaultLocale)
             }
             protectedRoutes(provisioner) {
                 accountRoutes(get())

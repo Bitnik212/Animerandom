@@ -44,7 +44,6 @@ dependencies {
     implementation(libs.flyway.postgres)
     implementation(libs.koin.ktor)
     implementation(libs.lettuce)
-    implementation(libs.elasticsearch.java)
     implementation(libs.jackson.databind)
     implementation(libs.jwks.rsa)
     implementation(libs.java.jwt)

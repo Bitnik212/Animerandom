@@ -17,6 +17,10 @@ complexity:
     thresholdInObjects: 25
   LongMethod:
     threshold: 80
+performance:
+  # Redis varargs (SADD, SINTERSTORE, …) take arrays; the copy is irrelevant at these sizes.
+  SpreadOperator:
+    active: false
 exceptions:
   TooGenericExceptionCaught:
     active: false

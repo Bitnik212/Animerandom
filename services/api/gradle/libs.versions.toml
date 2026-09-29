@@ -9,7 +9,6 @@ postgres = "42.7.13"
 flyway = "13.8.1"
 koin = "4.2.2"
 lettuce = "7.8.0.RELEASE"
-elasticsearch = "8.19.22"
 jackson = "2.22.3"
 jwks-rsa = "0.24.1"
 java-jwt = "4.6.1"
@@ -49,7 +48,6 @@ flyway-core = { module = "org.flywaydb:flyway-core", version.ref = "flyway" }
 flyway-postgres = { module = "org.flywaydb:flyway-database-postgresql", version.ref = "flyway" }
 koin-ktor = { module = "io.insert-koin:koin-ktor", version.ref = "koin" }
 lettuce = { module = "io.lettuce:lettuce-core", version.ref = "lettuce" }
-elasticsearch-java = { module = "co.elastic.clients:elasticsearch-java", version.ref = "elasticsearch" }
 jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
 jwks-rsa = { module = "com.auth0:jwks-rsa", version.ref = "jwks-rsa" }
 java-jwt = { module = "com.auth0:java-jwt", version.ref = "java-jwt" }
