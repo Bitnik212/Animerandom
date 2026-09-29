@@ -12,3 +12,7 @@ live APIs when you can (the tests only rely on the ids and fields they assert on
 - `shikimori_16498.json`, `shikimori_9253.json`: with and without a licensed Russian title;
   BBCode and a spoiler block in the description.
 - `annict_works.json`: a `searchWorks` response.
+- `shikimori_search.json`, `annict_search.json`: title-search results keyed by the
+  search text, for vector matching: a clear Shikimori match, an Annict work settled by
+  its own MAL link, and an ambiguous TV-vs-film pair that must go to review.
+- `shikimori_60001.json`: the detail payload of the matched Shikimori entry.

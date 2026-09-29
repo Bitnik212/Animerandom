@@ -4,13 +4,15 @@
          └──────────────(arm)──────────────> Annict id
 
 The manami snapshot fills MAL gaps. When sources disagree, AniList's idMal wins
-and the conflict is reported to the caller.
+and the conflict is reported to the caller. Admin overrides beat everything; a
+vector match (see vector.py) is kept only while no cross-reference has an id.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from catalog.models import AnimeOverride
 from pipeline.models import IdMapping, IdSourceEntry
 
 
@@ -57,16 +59,55 @@ def resolve(anilist_mal: dict[int, int | None]) -> MapResult:
         arm_by_mal.setdefault(entry.mal_id, entry)  # type: ignore[arg-type]
 
     existing = IdMapping.objects.in_bulk(ids)
+    overrides = _id_overrides(ids)
     for anilist_id, (mal_id, via) in resolved.items():
         m = existing.get(anilist_id) or IdMapping(anilist_id=anilist_id)
-        if mal_id != m.mal_id:
+        ovr = overrides.get(anilist_id, {})
+
+        # MAL: override, then cross-references, then an earlier vector match.
+        score = None
+        if "mal_id" in ovr:
+            mal_id, via = _int(ovr["mal_id"]), "override"
+        elif mal_id is None and m.mal_via == "vector":
+            mal_id, via, score = m.mal_id, "vector", m.mal_score
+        if mal_id != m.mal_id and m.shikimori_via != "override":
             m.shikimori_id = None  # re-resolved by the next Shikimori fetch
-        m.mal_id, m.mal_via = mal_id, via
+        m.mal_id, m.mal_via, m.mal_score = mal_id, via if mal_id else "", score
+
+        # Shikimori id override: fetched directly instead of by MAL id.
+        if "shikimori_id" in ovr:
+            m.shikimori_id, m.shikimori_via = ovr["shikimori_id"] or None, "override"
+        elif m.shikimori_via == "override":
+            m.shikimori_id, m.shikimori_via = None, ""
+
+        # Annict: override, then arm, then an earlier vector match.
         annict = arm_by_anilist.get(anilist_id) or (arm_by_mal.get(mal_id) if mal_id else None)
-        m.annict_id = annict.annict_id if annict else None
-        m.annict_via = "arm" if annict else ""
+        if "annict_id" in ovr:
+            m.annict_id, m.annict_via, m.annict_score = _int(ovr["annict_id"]), "override", None
+        elif annict:
+            m.annict_id, m.annict_via, m.annict_score = annict.annict_id, "arm", None
+        elif m.annict_via != "vector":
+            m.annict_id, m.annict_via, m.annict_score = None, "", None
         result.mappings.append(m)
     return result
+
+
+def _int(value: str) -> int | None:
+    value = value.strip()
+    return int(value) if value else None
+
+
+def _id_overrides(anilist_ids: list[int]) -> dict[int, dict[str, str]]:
+    """Admin overrides of mal_id / shikimori_id / annict_id beat every mapping source."""
+    rows = AnimeOverride.objects.filter(
+        anime__anilist_id__in=anilist_ids,
+        field__in=["mal_id", "shikimori_id", "annict_id"],
+        locale__isnull=True,
+    ).values_list("anime__anilist_id", "field", "value")
+    out: dict[int, dict[str, str]] = {}
+    for anilist_id, name, value in rows:
+        out.setdefault(anilist_id, {})[name] = value
+    return out
 
 
 def save(result: MapResult) -> None:
@@ -77,9 +118,12 @@ def save(result: MapResult) -> None:
         update_fields=[
             "mal_id",
             "mal_via",
+            "mal_score",
             "shikimori_id",
+            "shikimori_via",
             "annict_id",
             "annict_via",
+            "annict_score",
             "updated_at",
         ],
         batch_size=1000,

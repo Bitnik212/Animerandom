@@ -1,0 +1,50 @@
+{
+ "進撃の巨人": [
+  {
+   "annictId": 2143,
+   "title": "進撃の巨人",
+   "titleEn": "Attack on Titan",
+   "titleKana": "しんげきのきょじん",
+   "titleRo": "Shingeki no Kyojin",
+   "malAnimeId": "16498",
+   "seasonYear": 2013,
+   "media": "TV",
+   "episodesCount": 25
+  },
+  {
+   "annictId": 5000,
+   "title": "進撃の巨人 Season2",
+   "titleEn": "Attack on Titan Season 2",
+   "titleKana": null,
+   "titleRo": null,
+   "malAnimeId": "25777",
+   "seasonYear": 2017,
+   "media": "TV",
+   "episodesCount": 12
+  }
+ ],
+ "境界の彼方": [
+  {
+   "annictId": 1100,
+   "title": "境界の彼方",
+   "titleEn": "Beyond the Boundary",
+   "titleKana": null,
+   "titleRo": "Kyoukai no Kanata",
+   "malAnimeId": null,
+   "seasonYear": 2013,
+   "media": "TV",
+   "episodesCount": 12
+  },
+  {
+   "annictId": 4200,
+   "title": "劇場版 境界の彼方 -I'LL BE HERE- 未来篇",
+   "titleEn": null,
+   "titleKana": null,
+   "titleRo": null,
+   "malAnimeId": null,
+   "seasonYear": 2015,
+   "media": "MOVIE",
+   "episodesCount": 1
+  }
+ ]
+}

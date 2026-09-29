@@ -49,7 +49,11 @@ class Sources:
         self.shikimori: dict[int, Any] = {
             16498: fixture("shikimori_16498.json"),
             9253: fixture("shikimori_9253.json"),
+            60001: fixture("shikimori_60001.json"),
         }
+        self.shikimori_search = fixture("shikimori_search.json")
+        self.annict_search = fixture("annict_search.json")
+        self.searches: list[tuple[str, str]] = []
         self.anilist_calls = 0
         self.anilist_hook: Any = None  # (call number) -> response or None
 
@@ -83,14 +87,29 @@ class Sources:
             return payload
         return httpx.Response(200, json=payload) if payload else httpx.Response(404)
 
+    def shiki_find(self, request: httpx.Request) -> httpx.Response:
+        text = request.url.params["search"]
+        self.searches.append(("shikimori", text))
+        return httpx.Response(200, json=self.shikimori_search.get(text, []))
+
+    def annict(self, request: httpx.Request) -> httpx.Response:
+        variables = json.loads(request.content)["variables"]
+        if "titles" not in variables:
+            return httpx.Response(200, json=fixture("annict_works.json"))
+        (text,) = variables["titles"]
+        self.searches.append(("annict", text))
+        nodes = self.annict_search.get(text, [])
+        return httpx.Response(200, json={"data": {"searchWorks": {"nodes": nodes}}})
+
     def install(self, router: respx.MockRouter) -> None:
         router.post("https://graphql.anilist.co").mock(side_effect=self.anilist)
         router.get(url__regex=r"https://shikimori\.io/api/animes/(?P<mal_id>\w+)").mock(
             side_effect=self.shiki
         )
-        router.post("https://api.annict.com/graphql").mock(
-            return_value=httpx.Response(200, json=fixture("annict_works.json"))
+        router.get(url__regex=r"https://shikimori\.io/api/animes\?").mock(
+            side_effect=self.shiki_find
         )
+        router.post("https://api.annict.com/graphql").mock(side_effect=self.annict)
         router.get(url__regex=r"https://raw\.githubusercontent\.com/.*arm\.json").mock(
             return_value=httpx.Response(200, json=ARM)
         )
@@ -127,8 +146,8 @@ def test_full_run_with_limit(eager_celery, sources, fake_es, isolated_redis):
 
     # Raw payloads are stored before anything else.
     assert RawSourceRecord.objects.filter(source="anilist").count() == 6
-    assert RawSourceRecord.objects.filter(source="shikimori").count() == 2
-    assert RawSourceRecord.objects.filter(source="annict").count() == 1
+    assert RawSourceRecord.objects.filter(source="shikimori").count() == 3  # one vector match
+    assert RawSourceRecord.objects.filter(source="annict").count() == 2  # one found by search
 
     # Merged rows.
     assert Anime.objects.count() == 6
@@ -314,3 +333,69 @@ def test_transient_errors_give_up_after_six_attempts(
     assert "gave up after 6 attempts" in failed.message
     # The first range was lost, so this run must not mark anything REMOVED.
     assert run.stages.get(name="mark_removed").counts == {"skipped": 1}
+
+
+def test_vector_matching_fills_missing_mappings(eager_celery, sources, fake_es):
+    run = run_pipeline(RunMode.FULL, limit=6)
+    assert run.status == RunStatus.DONE, run.error
+
+    # No idMal, no manami or arm entry: found on Shikimori by title search.
+    m = IdMapping.objects.get(anilist_id=100001)
+    assert (m.mal_id, m.mal_via, m.shikimori_id) == (60001, "vector", "60001")
+    assert m.mal_score >= 0.8
+    assert titles(100001)["ru"].title == "Наши будни"
+    assert Anime.objects.get(anilist_id=100001).mal_id == 60001
+
+    # Not in arm: found on Annict, settled by the work's own MAL link.
+    aot = IdMapping.objects.get(anilist_id=16498)
+    assert (aot.annict_id, aot.annict_via, aot.annict_score) == (2143, "vector", 1.0)
+    assert Anime.objects.get(anilist_id=16498).annict_id == "2143"
+
+    # TV series and film with the same name: reported for review, not guessed.
+    kyoukai = IdMapping.objects.get(anilist_id=21827)
+    assert kyoukai.annict_id is None and kyoukai.annict_searched_at is not None
+    review = RunItemError.objects.get(run=run, kind="review", item_id="21827")
+    assert "境界の彼方" in review.message and "1100" in review.message
+
+    counts = run.stages.get(name="fetch_shikimori").counts
+    assert counts["vector_matched"] == 1 and counts["vector_searched"] == 1
+
+
+def test_vector_matches_persist_and_searches_wait_for_recheck(eager_celery, sources, fake_es):
+    run_pipeline(RunMode.FULL, limit=6)
+    first = list(sources.searches)
+    assert ("shikimori", "ぼくらの日常") in first and ("annict", "境界の彼方") in first
+
+    run = run_pipeline(RunMode.FULL, limit=6)
+    assert run.status == RunStatus.DONE, run.error
+    assert sources.searches == first  # nothing searched again within VECTOR_RECHECK_DAYS
+    assert IdMapping.objects.get(anilist_id=100001).mal_via == "vector"  # kept by map_ids
+    assert IdMapping.objects.get(anilist_id=16498).annict_id == 2143
+
+
+def test_refresh_searches_again(eager_celery, sources, fake_es):
+    run_pipeline(RunMode.FULL, limit=6)
+    before = len(sources.searches)
+    run_pipeline(RunMode.REFRESH, anilist_ids=[21827])
+    assert ("annict", "境界の彼方") in sources.searches[before:]
+
+
+def test_id_override_beats_vector_match(eager_celery, sources, fake_es):
+    run_pipeline(RunMode.FULL, limit=6)
+    anime = Anime.objects.get(anilist_id=21827)
+    anime.overrides.create(field="annict_id", value="1100", note="TV series is the right one")
+    run = run_pipeline(RunMode.REFRESH, anilist_ids=[21827])
+    assert run.status == RunStatus.DONE, run.error
+    m = IdMapping.objects.get(anilist_id=21827)
+    assert (m.annict_id, m.annict_via) == (1100, "override")
+
+
+def test_cross_reference_replaces_vector_match(eager_celery, sources, fake_es):
+    run_pipeline(RunMode.FULL, limit=6)
+    assert IdMapping.objects.get(anilist_id=100001).mal_via == "vector"
+    for m in sources.media:
+        if m["id"] == 100001:
+            m["idMal"] = 60001
+    run_pipeline(RunMode.REFRESH, anilist_ids=[100001])
+    m = IdMapping.objects.get(anilist_id=100001)
+    assert (m.mal_id, m.mal_via, m.mal_score) == (60001, "anilist", None)

@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections.abc import Callable, Iterator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from django.conf import settings
@@ -21,8 +21,8 @@ from pydantic import ValidationError
 
 from catalog.models import Anime, AnimeOverride, RawSourceRecord
 from pipeline import vocab
-from pipeline.http import ItemFailed
-from pipeline.idmap import arm, manami, mapping
+from pipeline.http import ItemFailed, SourceClient
+from pipeline.idmap import arm, manami, mapping, vector
 from pipeline.localize.fallback import localize
 from pipeline.merge.precedence import MergedAnime, MergeInput, Override, merge
 from pipeline.models import IdMapping, IdSourceEntry
@@ -212,42 +212,114 @@ def map_ids(run_id: int) -> None:
 # --- Fetch: Shikimori and Annict ---------------------------------------------------------
 
 
+def _search_due(searched_at: datetime | None, force: bool) -> bool:
+    recheck = timedelta(days=settings.VECTOR_RECHECK_DAYS)
+    return force or searched_at is None or searched_at < timezone.now() - recheck
+
+
+def _is_refresh(run_id: int) -> bool:
+    return IngestRun.objects.filter(id=run_id, mode=RunMode.REFRESH).exists()
+
+
+def _report_review(
+    run_id: int, stage: str, anilist_id: int, source: str, text: str, result: vector.Match
+) -> None:
+    runs.record_item(
+        run_id,
+        stage,
+        f"{source}: no confident match for {text!r}; candidates: {result.describe()}",
+        source=source,
+        item_id=anilist_id,
+        kind="review",
+        unique=True,
+    )
+
+
 def fetch_shikimori(
     run_id: int, shard: int, shards: int, after: int | None, on_progress: Progress = _noop
 ) -> None:
+    """Fetch by MAL id (or an overridden Shikimori id). Anime without either get a
+    title search matched by vector similarity."""
+    force = _is_refresh(run_id)
     with shikimori.client() as c:
         for chunk in _run_anilist_ids(run_id, shard, shards, after):
-            mappings = IdMapping.objects.filter(
-                anilist_id__in=chunk, mal_id__isnull=False
-            ).order_by("anilist_id")
-            for m in mappings:
+            maps = IdMapping.objects.in_bulk(chunk)
+            to_search = [
+                i
+                for i, m in maps.items()
+                if not m.mal_id
+                and m.shikimori_via != "override"
+                and _search_due(m.shikimori_searched_at, force)
+            ]
+            media = load_raw(anilist.SOURCE, to_search) if to_search else {}
+            for anilist_id in chunk:
+                m = maps.get(anilist_id)
+                key = (m.shikimori_id if m.shikimori_via == "override" else m.mal_id) if m else None
                 try:
-                    payload = shikimori.fetch_by_mal_id(c, m.mal_id)  # type: ignore[arg-type]
+                    if m and key:
+                        _shikimori_fetch(run_id, c, m, key)
+                    elif m and str(anilist_id) in media:
+                        _shikimori_match(run_id, c, m, media[str(anilist_id)].payload)
                 except ItemFailed as exc:
                     runs.record_item(
                         run_id,
                         "fetch_shikimori",
                         str(exc),
                         source="shikimori",
-                        item_id=m.mal_id or "",
+                        item_id=key or anilist_id,
                     )
-                    on_progress(m.anilist_id)
-                    continue
-                if payload is None:
-                    m.shikimori_id = None
-                    runs.stage_count(run_id, "fetch_shikimori", processed=1, missing=1)
-                else:
-                    changed = store_raw(shikimori.SOURCE, [(payload["id"], payload)])
-                    m.shikimori_id = str(payload["id"])
-                    runs.stage_count(run_id, "fetch_shikimori", processed=1, changed=len(changed))
-                m.save(update_fields=["shikimori_id", "updated_at"])
-                on_progress(m.anilist_id)
-            on_progress(chunk[-1])
+                on_progress(anilist_id)
+
+
+def _shikimori_fetch(run_id: int, c: SourceClient, m: IdMapping, key: int | str) -> None:
+    payload = shikimori.fetch_by_id(c, key)
+    if payload is None:
+        m.shikimori_id = None
+        runs.stage_count(run_id, "fetch_shikimori", processed=1, missing=1)
+    else:
+        changed = store_raw(shikimori.SOURCE, [(payload["id"], payload)])
+        m.shikimori_id = str(payload["id"])
+        runs.stage_count(run_id, "fetch_shikimori", processed=1, changed=len(changed))
+    m.save(update_fields=["shikimori_id", "updated_at"])
+
+
+def _shikimori_match(run_id: int, c: SourceClient, m: IdMapping, media: dict[str, Any]) -> None:
+    text = vector.search_text(media)
+    if text:
+        results = shikimori.search(c, text, adult=bool(media.get("isAdult")))
+        result = vector.match(
+            vector.from_anilist(media), [vector.from_shikimori(r) for r in results]
+        )
+        if result.accepted and result.best:
+            payload = shikimori.fetch_by_id(c, result.accepted.id)
+            if payload is not None:
+                store_raw(shikimori.SOURCE, [(payload["id"], payload)])
+                m.shikimori_id = str(payload["id"])
+                m.mal_id = payload.get("myanimelist_id") or None
+                m.mal_via = "vector" if m.mal_id else ""
+                m.mal_score = round(result.best.score, 3)
+                runs.stage_count(run_id, "fetch_shikimori", processed=1, vector_matched=1)
+        elif result.decision == "review":
+            _report_review(run_id, "fetch_shikimori", m.anilist_id, "shikimori", text, result)
+        runs.stage_count(run_id, "fetch_shikimori", vector_searched=1)
+    m.shikimori_searched_at = timezone.now()
+    m.save(
+        update_fields=[
+            "shikimori_id",
+            "mal_id",
+            "mal_via",
+            "mal_score",
+            "shikimori_searched_at",
+            "updated_at",
+        ]
+    )
 
 
 def fetch_annict(
     run_id: int, shard: int, shards: int, after: int | None, on_progress: Progress = _noop
 ) -> None:
+    """Fetch by Annict id in batches. Anime without one get a title search matched by
+    vector similarity (or by the work's own MAL id when it has one)."""
     if not annict.enabled():
         runs.record_item(
             run_id,
@@ -258,17 +330,11 @@ def fetch_annict(
             unique=True,
         )
         return
+    force = _is_refresh(run_id)
     with annict.client() as c:
         for chunk in _run_anilist_ids(run_id, shard, shards, after):
-            ids = sorted(
-                {
-                    a
-                    for a in IdMapping.objects.filter(
-                        anilist_id__in=chunk, annict_id__isnull=False
-                    ).values_list("annict_id", flat=True)
-                    if a
-                }
-            )
+            maps = IdMapping.objects.in_bulk(chunk)
+            ids = sorted({m.annict_id for m in maps.values() if m.annict_id})
             for i in range(0, len(ids), annict.BATCH_SIZE):
                 batch = ids[i : i + annict.BATCH_SIZE]
                 try:
@@ -290,7 +356,56 @@ def fetch_annict(
                     changed=len(changed),
                     missing=len(batch) - len(works),
                 )
+            to_search = [
+                i
+                for i, m in maps.items()
+                if not m.annict_id and _search_due(m.annict_searched_at, force)
+            ]
+            media = load_raw(anilist.SOURCE, to_search) if to_search else {}
+            for anilist_id in sorted(to_search):
+                if str(anilist_id) not in media:
+                    continue
+                try:
+                    _annict_match(run_id, c, maps[anilist_id], media[str(anilist_id)].payload)
+                except ItemFailed as exc:
+                    runs.record_item(
+                        run_id, "fetch_annict", str(exc), source="annict", item_id=anilist_id
+                    )
             on_progress(chunk[-1])
+
+
+def _annict_match(run_id: int, c: SourceClient, m: IdMapping, media: dict[str, Any]) -> None:
+    text = vector.search_text(media, prefer_native=True)
+    if text:
+        works = {str(w["annictId"]): w for w in annict.search_works(c, text)}
+        chosen: tuple[dict, float] | None = None
+        by_mal = [w for w in works.values() if m.mal_id and w.get("malAnimeId") == str(m.mal_id)]
+        if len(by_mal) == 1:
+            chosen = (by_mal[0], 1.0)  # Annict's own MAL link settles it
+        else:
+            result = vector.match(
+                vector.from_anilist(media), [vector.from_annict(w) for w in works.values()]
+            )
+            if result.accepted and result.best:
+                chosen = (works[result.accepted.id], result.best.score)
+            elif result.decision == "review":
+                _report_review(run_id, "fetch_annict", m.anilist_id, "annict", text, result)
+        if chosen:
+            work, score = chosen
+            store_raw(annict.SOURCE, [(work["annictId"], work)])
+            m.annict_id, m.annict_via, m.annict_score = work["annictId"], "vector", round(score, 3)
+            runs.stage_count(run_id, "fetch_annict", processed=1, vector_matched=1)
+        runs.stage_count(run_id, "fetch_annict", vector_searched=1)
+    m.annict_searched_at = timezone.now()
+    m.save(
+        update_fields=[
+            "annict_id",
+            "annict_via",
+            "annict_score",
+            "annict_searched_at",
+            "updated_at",
+        ]
+    )
 
 
 # --- Merge, localize, write --------------------------------------------------------------
