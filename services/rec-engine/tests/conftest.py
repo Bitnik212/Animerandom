@@ -1,5 +1,5 @@
 """Integration setup: a fresh database with pgvector, the ingest worker's catalog
-contract, a stand-in `app` schema, and this service's migrations.
+contract, the API's `app` migrations, and this service's migrations.
 
 Point REC_TEST_POSTGRES_URL at a server where the role can create databases and the
 pgvector extension is installed (default: a local server on port 5433).
@@ -26,6 +26,13 @@ from rec_engine.db import Database, engine
 
 HERE = Path(__file__).parent
 CONTRACT = HERE.parent.parent / "ingest-worker" / "contract" / "catalog-schema.sql"
+# Schema `app` belongs to the API; its Flyway migrations are the source of truth.
+APP_MIGRATIONS = HERE.parent.parent / "api" / "src" / "main" / "resources" / "db" / "migration"
+
+
+def app_migrations() -> list[Path]:
+    """V1__x.sql, V2__y.sql, ... in version order, as Flyway applies them."""
+    return sorted(APP_MIGRATIONS.glob("V*__*.sql"), key=lambda p: int(p.name[1:].split("__")[0]))
 ADMIN_URL = os.environ.get("REC_TEST_POSTGRES_URL", "postgresql://postgres@127.0.0.1:5433/postgres")
 
 # Six genre clusters of ten anime each; the words make their synopses (and so their
@@ -80,7 +87,9 @@ def database_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     with psycopg.connect(url, autocommit=True) as conn:
         conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
         conn.execute(CONTRACT.read_text(encoding="utf-8"))  # type: ignore[arg-type]
-        conn.execute((HERE / "sql" / "app_schema.sql").read_text(encoding="utf-8"))  # type: ignore[arg-type]
+        conn.execute("CREATE SCHEMA app")
+        for migration in app_migrations():
+            conn.execute(migration.read_text(encoding="utf-8"))  # type: ignore[arg-type]
         _load_catalog(conn)
 
     os.environ.update(

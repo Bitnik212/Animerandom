@@ -61,8 +61,8 @@ Each folder under `features/` contains `Routes.kt` (HTTP only), `Service.kt` (lo
 ```bash
 # from services/api, with postgres, elasticsearch, redis, keycloak, rec-engine running
 ./gradlew run                    # http://localhost:8080
-./gradlew test                   # unit + Testcontainers integration tests
-./gradlew ktlintCheck detekt     # must pass before merging
+./gradlew test                   # unit + integration tests (see Testing for what they need)
+./gradlew ktlintCheck detekt     # must pass before merging (detekt checks src/main only)
 ./gradlew installDist            # build used by the Dockerfile
 ```
 
@@ -88,6 +88,8 @@ Or from the repo root: `docker compose up -d api`.
 | `AUTH_RATE_LIMIT_EMAIL` | `5/min` | Sign-in attempts per email |
 | `EMAIL_VERIFICATION_REQUIRED` | `false` | Matches the realm's verify-email setting |
 | `JWT_LEEWAY_SECONDS` | `30` | Clock skew tolerance for `exp` and `nbf` |
+| `DB_POOL_SIZE` | `10` | Hikari pool size |
+| `RUN_MIGRATIONS` | `true` | Apply Flyway migrations for `app` on start |
 
 ## Authentication
 
@@ -390,12 +392,16 @@ Mapped in `errors/`. Stable `type` values:
 
 ## Testing
 
-- Unit tests cover services with in-memory fakes of repositories.
-- Integration tests use Testcontainers for Postgres, Elasticsearch, and Redis, load the catalog contract (`services/ingest-worker/contract/catalog-schema.sql`) into a `catalog` schema, apply this service's Flyway migrations to `app`, and load fixtures from `src/test/resources/fixtures/` (about 50 anime with all four locales, some deliberately missing translations to exercise fallbacks).
-- The rec engine is replaced with a WireMock stub in integration tests, including a slow response to test the timeout fallback.
-- Token tests sign JWTs with a test RSA key served from a WireMock JWKS endpoint, and cover each rejection rule in the validation table (wrong `iss`, wrong `aud`, wrong `azp`, expired, unknown `kid`, ID token instead of access token).
-- Keycloak's token endpoint and Admin API are stubbed with WireMock in regular tests, including every error mapping in the Errors table.
-- One slower test class runs a real Keycloak in Testcontainers with the realm export from `infra/keycloak/` and covers sign-up, sign-in, refresh, sign-out, locale sync, password change, and account deletion end to end.
+- Unit tests cover locale resolution, fallback chains, message bundles, and config parsing, plus services with in-memory fakes where a feature has logic of its own.
+- Integration tests run the whole application with Ktor's test host. They need:
+  - A Postgres where `API_TEST_POSTGRES_URL` (default `postgresql://postgres@127.0.0.1:5433/postgres`) can create databases. Each test run creates a fresh database, loads the catalog contract (`services/ingest-worker/contract/catalog-schema.sql`) and `src/test/resources/fixtures/catalog.sql`, and lets Flyway migrate `app`.
+  - A Redis at `API_TEST_REDIS_URL` (default DB 14 on local port 6380), flushed before every test.
+
+  CI provides both as service containers.
+- Keycloak's JWKS endpoint is a WireMock server with a test RSA key. Token tests break each rule in the validation table on its own: wrong `iss`, `aud` and `azp`; expired and not-yet-valid; unknown `kid`; a bad signature; ID and refresh tokens; and garbage.
+- The fixture catalog (`src/test/resources/fixtures/`, 12 anime) has deliberately missing translations, to exercise the fallbacks.
+- The rec engine tests load this service's Flyway migrations for `app`, so a migration that breaks them fails their CI job too.
+- Not done yet: Testcontainers (tests use externally provided services), and the WireMock stubs for the rec engine, the Keycloak token and Admin APIs, and Elasticsearch. Those arrive with the features that use them.
 
 ## Rules
 
