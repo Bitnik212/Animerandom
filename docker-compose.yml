@@ -73,11 +73,20 @@ services:
       KC_HOSTNAME: ${KC_HOSTNAME}
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+      # Substituted into realm-anime-picker.json on import.
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?set KEYCLOAK_CLIENT_SECRET in .env}
+      KC_SMTP_HOST: ${KC_SMTP_HOST:-mailpit}
+      KC_SMTP_PORT: ${KC_SMTP_PORT:-1025}
     volumes:
-      - ./infra/keycloak:/opt/keycloak/data/import:ro
+      - ./infra/keycloak/realm-anime-picker.json:/opt/keycloak/data/import/realm-anime-picker.json:ro
     ports: ["8180:8080"]
     depends_on:
       postgres: { condition: service_healthy }
+
+  # Dev mail catcher for Keycloak's password-reset and verification emails (UI on :8025).
+  mailpit:
+    image: axllent/mailpit:v1.29
+    ports: ["8025:8025"]
 
   # One-shot: schemas catalog + ingest, id map snapshot, vocabulary.
   # Must finish before the api and rec-engine start (their FKs point into catalog).

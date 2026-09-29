@@ -400,9 +400,17 @@ Mapped in `errors/`. Stable `type` values:
 
   CI provides both as service containers.
 - Keycloak's JWKS endpoint is a WireMock server with a test RSA key. Token tests break each rule in the validation table on its own: wrong `iss`, `aud` and `azp`; expired and not-yet-valid; unknown `kid`; a bad signature; ID and refresh tokens; and garbage.
+- Keycloak's token endpoint and Admin REST API are WireMock stubs too (`support/KeycloakStubs.kt`). Auth tests cover:
+  - sign-up (tokens, the verification-required path, `email-taken`, `weak-password`, local validation before any Keycloak call, and deleting the Keycloak user again when the `app_user` insert fails)
+  - every sign-in outcome, including `502` when Keycloak errors or is unreachable
+  - refresh, sign-out, and forgot-password (always `202`)
+  - per-email and per-IP rate limits with `Retry-After`
+  - password change, logout everywhere, and account deletion (Postgres rows, `user:{id}:*` keys, then the Keycloak user; retryable)
+  - the admin view and role endpoints, the locale sync keeping other attributes, and service-account token reuse
+- `RealKeycloakTest` runs the same flows end to end against a real Keycloak with the committed realm imported: signup, the password policy, the audience mapper, password change, refresh and sign-out, service-account permissions, admin view, and deletion. It's skipped unless `API_TEST_KEYCLOAK_URL` and `API_TEST_KEYCLOAK_SECRET` are set; `API_TEST_KEYCLOAK_ISSUER` defaults to `{url}/realms/anime-picker`. CI doesn't run it yet.
 - The fixture catalog (`src/test/resources/fixtures/`, 12 anime) has deliberately missing translations, to exercise the fallbacks.
 - The rec engine tests load this service's Flyway migrations for `app`, so a migration that breaks them fails their CI job too.
-- Not done yet: Testcontainers (tests use externally provided services), and the WireMock stubs for the rec engine, the Keycloak token and Admin APIs, and Elasticsearch. Those arrive with the features that use them.
+- Not done yet: Testcontainers (tests use externally provided services), a real Keycloak in CI, and the WireMock stubs for the rec engine and Elasticsearch. Those arrive with the features that use them.
 
 ## Rules
 
