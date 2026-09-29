@@ -17,6 +17,7 @@ data class AppConfig(
     val jwtLeewaySeconds: Long,
     val runMigrations: Boolean = true,
     val dbPoolSize: Int = 10,
+    val trustForwardedHeaders: Boolean = false,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig {
@@ -42,6 +43,7 @@ data class AppConfig(
                 jwtLeewaySeconds = get("JWT_LEEWAY_SECONDS", "30").toLong(),
                 runMigrations = get("RUN_MIGRATIONS", "true").toBoolean(),
                 dbPoolSize = get("DB_POOL_SIZE", "10").toInt(),
+                trustForwardedHeaders = get("TRUST_FORWARDED_HEADERS", "false").toBoolean(),
             )
         }
     }
@@ -49,12 +51,17 @@ data class AppConfig(
 
 data class PostgresConfig(val jdbcUrl: String, val user: String, val password: String) {
     companion object {
+        /** RFC 3986 percent-decoding; unlike form decoding, '+' stays a plus. */
+        private fun percentDecode(value: String): String =
+            java.net.URLDecoder.decode(value.replace("+", "%2B"), Charsets.UTF_8)
+
         /** `postgresql://user:password@host:port/db` → JDBC URL plus credentials. */
         fun fromUrl(url: String): PostgresConfig {
             val uri = URI(url.replaceFirst("postgres://", "postgresql://"))
+            // Split before decoding, so an encoded ':' (%3A) stays inside the password.
             val (user, password) =
                 (uri.rawUserInfo ?: "").split(":", limit = 2).let {
-                    it.getOrElse(0) { "" } to it.getOrElse(1) { "" }
+                    percentDecode(it.getOrElse(0) { "" }) to percentDecode(it.getOrElse(1) { "" })
                 }
             val port = if (uri.port == -1) 5432 else uri.port
             val query = uri.rawQuery?.let { "?$it" } ?: ""

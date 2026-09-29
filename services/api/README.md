@@ -90,6 +90,7 @@ Or from the repo root: `docker compose up -d api`.
 | `JWT_LEEWAY_SECONDS` | `30` | Clock skew tolerance for `exp` and `nbf` |
 | `DB_POOL_SIZE` | `10` | Hikari pool size |
 | `RUN_MIGRATIONS` | `true` | Apply Flyway migrations for `app` on start |
+| `TRUST_FORWARDED_HEADERS` | `false` | Set to `true` only behind a reverse proxy. The client IP (used by the per-IP rate limits) is then the address that proxy reports (`X-Forwarded-For`, last hop). With `false`, forwarded headers are ignored, so clients can't choose their own IP. |
 
 ## Authentication
 

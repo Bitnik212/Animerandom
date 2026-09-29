@@ -86,7 +86,8 @@ fun Application.configure(config: AppConfig, overrides: Module? = null) {
         modules(listOfNotNull(appModule(config), overrides))
     }
     install(ContentNegotiation) { json(apiJson) }
-    install(XForwardedHeaders)
+    // Only behind a trusted proxy: otherwise any client could pick its own IP and dodge per-IP limits.
+    if (config.trustForwardedHeaders) install(XForwardedHeaders) { useLastProxy() }
     install(CallId) {
         header(HttpHeaders.XRequestId)
         generate { UUID.randomUUID().toString() }

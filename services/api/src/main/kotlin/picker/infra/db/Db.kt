@@ -14,6 +14,8 @@ class Db(val dataSource: HikariDataSource) : AutoCloseable {
     override fun close() = dataSource.close()
 
     companion object {
+        private const val CONNECTION_TIMEOUT_MS = 5_000L
+
         fun connect(config: PostgresConfig, poolSize: Int = 10): Db {
             val hikari =
                 HikariConfig().apply {
@@ -21,6 +23,7 @@ class Db(val dataSource: HikariDataSource) : AutoCloseable {
                     username = config.user
                     password = config.password
                     maximumPoolSize = poolSize
+                    connectionTimeout = CONNECTION_TIMEOUT_MS
                     poolName = "api"
                     isAutoCommit = false
                     transactionIsolation = "TRANSACTION_READ_COMMITTED"

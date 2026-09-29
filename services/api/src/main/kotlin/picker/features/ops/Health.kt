@@ -8,8 +8,10 @@ import io.ktor.http.isSuccess
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import picker.infra.db.Db
@@ -31,7 +33,15 @@ fun healthChecks(
 ): List<HealthCheck> =
     listOf(
         HealthCheck("postgres", true) {
-            db.dataSource.connection.use { it.createStatement().execute("SELECT 1") }
+            // Off the event loop, and interruptible so the /readyz timeout really stops it.
+            runInterruptible(Dispatchers.IO) {
+                db.dataSource.connection.use { conn ->
+                    conn.createStatement().use {
+                        it.queryTimeout = 2
+                        it.execute("SELECT 1")
+                    }
+                }
+            }
         },
         HealthCheck("redis", true) { check(redis.commands.ping() == "PONG") },
         HealthCheck("elasticsearch", true) {
@@ -56,14 +66,17 @@ fun Route.opsRoutes(checks: List<HealthCheck>) {
                 checks
                     .map { c ->
                         async {
+                            val started = System.nanoTime()
                             val outcome =
-                                withTimeoutOrNull(2_000) {
+                                withTimeoutOrNull(CHECK_TIMEOUT_MS) {
                                     runCatching { c.check() }.fold(
                                         { "ok" },
                                         { "error: ${it.message ?: it::class.simpleName}" },
                                     )
-                                } ?: "error: timeout"
-                            c to outcome
+                                }
+                            // An interrupted blocking check fails with its own error; still report the timeout.
+                            val timedOut = (System.nanoTime() - started) / 1_000_000 >= CHECK_TIMEOUT_MS
+                            c to (if (outcome == null || (timedOut && outcome != "ok")) "error: timeout" else outcome)
                         }
                     }.map { it.await() }
             }
@@ -74,3 +87,5 @@ fun Route.opsRoutes(checks: List<HealthCheck>) {
         )
     }
 }
+
+private const val CHECK_TIMEOUT_MS = 2_000L
