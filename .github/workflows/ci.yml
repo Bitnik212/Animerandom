@@ -1,0 +1,48 @@
+# One workflow for the whole repo. `changes` decides which service jobs run; `ci-ok`
+# always runs and is the only required check, so PRs that touch no service can merge.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      ingest-worker: ${{ steps.filter.outputs.ingest-worker }}
+      rec-engine: ${{ steps.filter.outputs.rec-engine }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            ingest-worker:
+              - "services/ingest-worker/**"
+              - "infra/**"
+              - ".github/workflows/ci.yml"
+            rec-engine:
+              - "services/rec-engine/**"
+              - "services/ingest-worker/contract/**"
+              - ".github/workflows/ci.yml"
+
+  # Service jobs go here, each with `needs: changes` and
+  # `if: needs.changes.outputs.<service> == 'true'`, and are listed in ci-ok's needs.
+
+  ci-ok:
+    if: always()
+    needs: [changes]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every needed job passed or was skipped
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS"
+          echo "$RESULTS" | jq -e 'to_entries | all(.value.result == "success" or .value.result == "skipped")'

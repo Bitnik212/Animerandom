@@ -20,7 +20,14 @@ Scopes match the repo layout: `ingest`, `rec`, `api`, `infra`, `repo`. Examples:
 `feat/ingest-vector-matching`, `fix/rec-sequel-order`, `chore/repo-ci`.
 
 If a change depends on another open PR, branch from that PR's branch and set it as the
-base (a stacked PR). Once the lower PR is merged, retarget yours to `main` and rebase it.
+base (a stacked PR). Once the lower PR is squash-merged, retarget yours to `main`, and
+drop the lower PR's original commits by rebasing only your own on top of `main`:
+
+```bash
+git fetch origin
+git rebase --onto origin/main <lower-pr-branch> <your-branch>
+git push --force-with-lease
+```
 
 ## Commits and PR titles
 
@@ -39,8 +46,9 @@ the same format. Commits inside a branch can be informal.
 
 - One logical change per PR. Split service changes from unrelated infra changes.
 - Fill in the template: what changed, which contracts it touches, how it was tested.
-- CI must be green. Each service has its own workflow, and it runs only when that
-  service (or what it depends on) changes.
+- CI must be green. `.github/workflows/ci.yml` runs each service's job only when that
+  service (or what it depends on) changes. The `ci-ok` job always runs and fails if any
+  job that ran failed.
 - Follow the "Making changes" rules in the root README for contracts: the catalog
   contract, the API contract, the api ↔ rec-engine contract, and the Elasticsearch mapping.
 - Delete the branch after merging.
@@ -62,6 +70,7 @@ The repository owner applies these once in GitHub → Settings:
   "Automatically delete head branches".
 - **Branches → branch protection for `main`:**
   - require a pull request before merging
-  - require status checks to pass (the service CI jobs)
+  - require the status check `ci-ok` to pass. Require only `ci-ok`, not the service
+    jobs, which are skipped when their service is untouched.
   - require linear history
   - block force pushes and deletions
