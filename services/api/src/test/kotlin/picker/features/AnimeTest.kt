@@ -95,6 +95,26 @@ class AnimeTest : ApiTest() {
         }
 
     @Test
+    fun `adult titles don't exist without opt-in, not even by id`() =
+        api { client ->
+            client.get("/v1/anime/6").status shouldBe HttpStatusCode.NotFound
+            client.get("/v1/anime/6/similar").status shouldBe HttpStatusCode.NotFound
+            val plain = UUID.randomUUID()
+            TestInfra.sql("INSERT INTO app.app_user (id) VALUES ('$plain')")
+            client.get("/v1/anime/6") { bearer(FakeKeycloak.token(sub = plain)) }.status shouldBe
+                HttpStatusCode.NotFound
+            FakeKeycloak.server.verify(exactly(0), getRequestedFor(urlPathMatching("/rec/.*")))
+
+            val adult = UUID.randomUUID()
+            TestInfra.sql("INSERT INTO app.app_user (id, show_adult) VALUES ('$adult', true)")
+            client.get("/v1/anime/6") { bearer(FakeKeycloak.token(sub = adult)) }.obj().str("title") shouldBe
+                "Adult Title"
+            CatalogStubs.similar(6, listOf(4))
+            client.get("/v1/anime/6/similar") { bearer(FakeKeycloak.token(sub = adult)) }.status shouldBe
+                HttpStatusCode.OK
+        }
+
+    @Test
     fun `unknown and malformed ids`() =
         api { client ->
             client.get("/v1/anime/999").let {

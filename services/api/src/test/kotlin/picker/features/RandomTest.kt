@@ -6,6 +6,7 @@ import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.longs.shouldBeInRange
 import io.kotest.matchers.shouldBe
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -119,6 +120,25 @@ class RandomTest : ApiTest() {
                 TestInfra.redisUrl,
             ).use { runBlocking { it.commands.smembers(Keys.userExcluded(id)).toList() } } shouldBe
                 listOf("0")
+        }
+
+    @Test
+    fun `reads don't extend the exclusion set's TTL, so it's rebuilt daily`() =
+        api { client ->
+            val id = user()
+            val token = FakeKeycloak.token(sub = id)
+            client.pick("count=1", token)
+            Redis(TestInfra.redisUrl).use { r ->
+                runBlocking {
+                    r.commands.ttl(Keys.userExcluded(id))!! shouldBeInRange 86_000L..86_400L
+                    r.commands.expire(Keys.userExcluded(id), 100)
+                }
+            }
+            client.pick("count=1", token)
+            Redis(TestInfra.redisUrl).use { r ->
+                runBlocking { r.commands.ttl(Keys.userExcluded(id)) }
+            }!! shouldBeInRange
+                1L..100L
         }
 
     @Test

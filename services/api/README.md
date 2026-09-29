@@ -244,7 +244,7 @@ List endpoints return a shorter card without `synopsis`. `titleLocale` and `syno
 
 | Method and path | Purpose |
 |---|---|
-| `GET /anime/{id}` | Full card plus `tags` (`slug`, `name`, `rank`, `spoiler`; by rank), `studios` (`name`, `main`), and `relations` (`kind` and a short `anime` card; adult titles only with `showAdult`), all in one object. `REMOVED` anime still resolve, so old list entries keep working. |
+| `GET /anime/{id}` | Full card plus `tags` (`slug`, `name`, `rank`, `spoiler`; by rank), `studios` (`name`, `main`), and `relations` (`kind` and a short `anime` card; adult titles only with `showAdult`), all in one object. `REMOVED` anime still resolve, so old list entries keep working. Adult titles are `404 anime-not-found` here and on `/similar` unless the user has `showAdult`. |
 | `GET /anime/{id}/similar?limit=20` | "More like this" from the rec engine, `{ "items": [short cards] }` in the engine's order. `limit` 1–50. If the engine errors or exceeds `REC_ENGINE_TIMEOUT_MS`, `items` is empty rather than an error. |
 | `GET /anime/random` | Random pick, see below |
 | `GET /meta/genres` | All genres with localized names |
@@ -360,6 +360,7 @@ Recommendation items are cards plus a localized reason:
 
 - "Watched" means `watching`, `completed`, or `dropped`. `planned` titles stay pickable, since picking from them is the point of a watchlist.
 - Redis can't store an empty set, so the set always holds the member `0` (catalog IDs start at 1). That way a user with nothing excluded doesn't trigger a rebuild on every request.
+- The TTL is set only when the set is built, atomically with its members, and reads never extend it. So every set is rebuilt from Postgres at least daily, which corrects any drift.
 - In-place updates only touch an existing set, atomically in a Lua script. They never create a set with no TTL.
 - Scratch keys (`tmp:rand:*`, and one for the watchlist when `source=watchlist`) are deleted after each pick. The 10 s TTL only covers a crash mid-request.
 

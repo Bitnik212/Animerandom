@@ -70,8 +70,8 @@ class AnimeService(
 
     /** `GET /anime/{id}`: the full card plus tags, studios, and relations, as one flat object. */
     suspend fun details(id: Long, locale: AppLocale, userId: UUID?): JsonObject {
-        val card = cardData(listOf(id), locale).firstOrNull() ?: throw Errors.animeNotFound(id)
         val showAdult = userId?.let { users.showAdult(it) } ?: false
+        val card = visible(cardData(listOf(id), locale).firstOrNull(), showAdult) ?: throw Errors.animeNotFound(id)
         val extras = repository.extras(id)
         val tagNames = meta.tagNames(locale)
         val related = cardData(extras.relations.map { it.second }, locale).associateBy { it.id }
@@ -102,11 +102,17 @@ class AnimeService(
      * `showAdult`. If the engine is slow or down the list is empty rather than an error.
      */
     suspend fun similar(id: Long, limit: Int, locale: AppLocale, userId: UUID?): SummaryList {
-        if (repository.rows(listOf(id)).isEmpty()) throw Errors.animeNotFound(id)
         val showAdult = userId?.let { users.showAdult(it) } ?: false
+        visible(repository.rows(listOf(id))[id], showAdult) { it.isAdult } ?: throw Errors.animeNotFound(id)
         val ids = rec.similar(id, limit, includeAdult = showAdult) ?: return SummaryList(emptyList())
         return SummaryList(summaries(ids, locale, userId))
     }
+
+    /** Adult titles don't exist for users who haven't opted in, not even by ID. */
+    private fun visible(card: CardData?, showAdult: Boolean): CardData? = visible(card, showAdult) { it.isAdult }
+
+    private fun <T : Any> visible(item: T?, showAdult: Boolean, isAdult: (T) -> Boolean): T? =
+        item?.takeIf { showAdult || !isAdult(it) }
 
     private fun localize(row: AnimeRow, locale: AppLocale, genreNames: Map<String, String>): CardData {
         val titles = row.texts.mapValues { it.value.title }

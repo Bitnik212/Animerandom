@@ -17,14 +17,23 @@ import java.util.UUID
  */
 @OptIn(ExperimentalLettuceCoroutinesApi::class)
 class Exclusions(private val redis: Redis, private val users: UserRepository) {
-    /** Makes sure the set exists and returns its key, for use in `SDIFFSTORE`. */
+    /**
+     * Makes sure the set exists and returns its key, for use in `SDIFFSTORE`. The TTL is set only
+     * when the set is built (atomically with its members), never on reads, so every set really is
+     * rebuilt from Postgres at least once a day, even for users who are active all the time.
+     */
     suspend fun ensure(userId: UUID): String {
         val key = Keys.userExcluded(userId)
         if (redis.commands.exists(key) == 0L) {
             val ids = users.excludedIds(userId).map { it.toString() } + SENTINEL
-            redis.commands.sadd(key, *ids.toTypedArray())
+            redis.commands.eval<Long>(
+                BUILD_IF_MISSING,
+                ScriptOutputType.INTEGER,
+                arrayOf(key),
+                TTL_SECONDS.toString(),
+                *ids.toTypedArray(),
+            )
         }
-        redis.commands.expire(key, TTL_SECONDS)
         return key
     }
 
@@ -55,6 +64,9 @@ class Exclusions(private val redis: Redis, private val users: UserRepository) {
     companion object {
         const val SENTINEL = "0"
         const val TTL_SECONDS = 24 * 3600L
+        private const val BUILD_IF_MISSING =
+            "if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end " +
+                "redis.call('SADD', KEYS[1], unpack(ARGV, 2)) redis.call('EXPIRE', KEYS[1], ARGV[1]) return 1"
         private const val ADD_IF_EXISTS =
             "if redis.call('EXISTS', KEYS[1]) == 1 then return redis.call('SADD', KEYS[1], ARGV[1]) end return 0"
     }
