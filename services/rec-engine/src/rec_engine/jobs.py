@@ -91,14 +91,16 @@ def evaluate_job(
     adult = db.users(targets)
 
     results: dict[str, list[tuple[float, float]]] = {"hybrid": [], "popular": []}
-    for name, provider in (("hybrid", lambda: model), ("popular", lambda: None)):
-        rec = Recommender(db, provider)
+    rec = Recommender(db, lambda: model)
+    for name in ("hybrid", "popular"):
         for user_id, wanted in targets.items():
+            # Both arms get the same history, so both exclude what the user already has;
+            # the baseline then ranks by popularity alone.
             user = UserData(user_id, known=True, show_adult=adult.get(user_id, False))
-            if name == "hybrid":
-                user.anime = {i.anime_id: (i.status, i.score) for i in by_user[user_id]}
-                user.not_interested = {a for u, a in blocked if u == user_id}
-            got = [r.anime_id for r in rec.recommend(user, k)]
+            user.anime = {i.anime_id: (i.status, i.score) for i in by_user[user_id]}
+            user.not_interested = {a for u, a in blocked if u == user_id}
+            ranked = rec.recommend(user, k) if name == "hybrid" else rec.popular(user, k)
+            got = [r.anime_id for r in ranked]
             results[name].append(_metrics(got, wanted, k))
 
     def mean(pairs: list[tuple[float, float]], idx: int) -> float:

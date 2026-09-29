@@ -136,30 +136,41 @@ class ModelStore:
         self._checked = 0.0
 
     def get(self) -> AlsModel | None:
+        """The current model. When a check is due, the one thread that claims it does the
+        DB read and file load outside the lock; everyone else keeps serving the model
+        they have meanwhile."""
         with self._lock:
-            if time.monotonic() - self._checked >= self.reload_seconds or self._checked == 0:
-                self._refresh()
+            now = time.monotonic()
+            due = self._checked == 0 or now - self._checked >= self.reload_seconds
+            if due:
+                self._checked = now  # claim the check
+            loaded_id = self._model_id
+        if due:
+            self._refresh(loaded_id)
+        with self._lock:
             return self._model
 
-    def _refresh(self) -> None:
-        self._checked = time.monotonic()
+    def _refresh(self, loaded_id: int | None) -> None:
         try:
             active = self.db.active_model(KIND)
         except Exception:
             log.exception("could not read the active model; keeping the current one")
             return
         if active is None:
-            self._model, self._model_id = None, None
+            with self._lock:
+                self._model, self._model_id = None, None
             return
         model_id, path, _ = active
-        if model_id == self._model_id:
+        if model_id == loaded_id:
             return
         try:
-            self._model = AlsModel.load(Path(path))
-            self._model_id = model_id
-            log.info("loaded ALS model %s", self._model.name)
+            model = AlsModel.load(Path(path))
         except OSError:
             log.exception("active model %s is unreadable; keeping the current one", path)
+            return
+        with self._lock:
+            self._model, self._model_id = model, model_id
+        log.info("loaded ALS model %s", model.name)
 
     def info(self) -> dict[str, Any]:
         model = self.get()

@@ -200,7 +200,7 @@ If schema `app` doesn't exist yet (the API hasn't migrated), every user is treat
 - Not done yet: Testcontainers, the real embedding model in tests (it can't be downloaded in the build sandbox), and a latency check at catalog scale.
 - `rec evaluate` reports recall@20 and nDCG@20 on a random 20% hold-out of ratings ≥ 8, next to a popularity-only baseline. Record the numbers in the change description when touching ranking logic.
 
-Evaluation on the synthetic test data (60 users, 96 held-out ratings) when this was written: recall@20 0.954 and nDCG@20 0.586, against 0.358 and 0.146 for popularity alone. The clusters make this far easier than real data. Re-run on real ratings once there are users.
+Evaluation on the synthetic test data (60 users, 96 held-out ratings) when this was written: recall@20 0.954 and nDCG@20 0.586, against 0.383 and 0.156 for popularity alone (both arms exclude what the user already has). The clusters make this far easier than real data. Re-run on real ratings once there are users.
 
 ## Rules
 

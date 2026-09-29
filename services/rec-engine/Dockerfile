@@ -13,7 +13,9 @@ COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /usr/local/bin/uv
 WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+# --inexact everywhere: torch and sentence-transformers aren't in uv.lock, and an exact
+# sync would uninstall them.
+RUN uv sync --frozen --no-dev --no-install-project --inexact
 
 # The embedding model: CPU-only torch (the PyPI build bundles CUDA), then the model
 # itself, downloaded now so nothing is fetched at runtime.
@@ -24,7 +26,8 @@ RUN uv pip install --python /opt/venv/bin/python --index-url https://download.py
 ENV HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 
 COPY . .
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --inexact \
+ && python -c "import sentence_transformers, rec_engine.app"
 
 RUN useradd --system --uid 10002 rec && mkdir -p /data/models && chown -R rec /data /app
 USER rec

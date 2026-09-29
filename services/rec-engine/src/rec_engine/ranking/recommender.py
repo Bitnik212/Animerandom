@@ -51,7 +51,7 @@ class Recommender:
     def recommend(self, user: UserData, limit: int) -> list[Ranked]:
         confidences = user_confidences(user.anime, user.not_interested)
         if not confidences:
-            return self._popular(user, limit)
+            return self.popular(user, limit)
 
         liked = (
             user.top_rated(cand.CONTENT_SEEDS)
@@ -125,8 +125,9 @@ class Recommender:
             best = int(np.argmax(sims))
             c.content, c.content_from = float(sims[best]), liked_ids[best]
 
-    def _popular(self, user: UserData, limit: int) -> list[Ranked]:
-        """Users without data (or unknown users): most popular titles."""
+    def popular(self, user: UserData, limit: int) -> list[Ranked]:
+        """Most popular titles the user doesn't have yet (users without data, unknown
+        users, and the baseline in `rec evaluate`)."""
         found = [a for a, _ in self.db.popular(limit * SEQUEL_WINDOW * 2) if a not in user.excluded]
         meta = self.db.anime_meta(found)
         top = max((meta[a].popularity for a in found if a in meta), default=0) or 1

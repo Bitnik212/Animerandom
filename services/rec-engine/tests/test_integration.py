@@ -272,3 +272,41 @@ def test_missing_app_schema_means_unknown_users(embedded, client):
     finally:
         with embedded.engine.begin() as conn:
             conn.execute(text("ALTER SCHEMA app_later RENAME TO app"))
+
+
+def test_model_store_picks_up_a_new_active_model(embedded, community):
+    from rec_engine.cf.als import ModelStore
+
+    store = ModelStore(embedded, reload_seconds=0)
+    assert store.get() is None
+    trained = jobs.train_job(embedded, factors=8, iterations=3)
+    assert store.get().name == trained["model"]
+
+
+def test_model_reload_does_not_block_other_requests(embedded, community):
+    import threading
+    import time
+
+    from rec_engine.cf.als import ModelStore
+
+    jobs.train_job(embedded, factors=8, iterations=3)
+    store = ModelStore(embedded, reload_seconds=3600)
+    model = store.get()
+    slow_started = threading.Event()
+    original = embedded.active_model
+
+    def slow_active_model(kind):
+        slow_started.set()
+        time.sleep(1.0)
+        return original(kind)
+
+    embedded.active_model = slow_active_model  # type: ignore[method-assign]
+    store.reload_seconds = 0
+    reloader = threading.Thread(target=store.get)
+    reloader.start()
+    assert slow_started.wait(2)
+    store.reload_seconds = 3600  # the next caller isn't due; it must not wait for the reload
+    began = time.monotonic()
+    assert store.get() is model
+    assert time.monotonic() - began < 0.5
+    reloader.join()
