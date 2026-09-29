@@ -141,6 +141,13 @@ VECTOR_MATCH_ACCEPT = env.float("VECTOR_MATCH_ACCEPT", default=0.80)
 VECTOR_MATCH_MARGIN = env.float("VECTOR_MATCH_MARGIN", default=0.08)
 VECTOR_MATCH_REVIEW = env.float("VECTOR_MATCH_REVIEW", default=0.60)
 VECTOR_RECHECK_DAYS = env.int("VECTOR_RECHECK_DAYS", default=30)
+# Rechecks are spread over this many extra days (by AniList id) so a month's unmatched
+# anime don't all come due on the same run.
+VECTOR_RECHECK_SPREAD_DAYS = env.int("VECTOR_RECHECK_SPREAD_DAYS", default=7)
+# Title searches per run and source. The backlog (e.g. every anime arm doesn't know,
+# on the first run) drains over successive runs instead of one very long one.
+# Refresh runs are not capped.
+VECTOR_SEARCHES_PER_RUN = env.int("VECTOR_SEARCHES_PER_RUN", default=300)
 
 # --- Auth for the ninja API -----------------------------------------------
 

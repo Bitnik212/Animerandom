@@ -32,7 +32,7 @@ from pipeline.sinks import postgres as pg_sink
 from pipeline.sinks import redis_pools
 from pipeline.sources import anilist, annict, shikimori
 from runs import services as runs
-from runs.models import IngestRun, RunAnime, RunItemError, RunMode
+from runs.models import IngestRun, RunAnime, RunItemError, RunMode, RunStage
 
 log = logging.getLogger(__name__)
 
@@ -212,9 +212,36 @@ def map_ids(run_id: int) -> None:
 # --- Fetch: Shikimori and Annict ---------------------------------------------------------
 
 
-def _search_due(searched_at: datetime | None, force: bool) -> bool:
-    recheck = timedelta(days=settings.VECTOR_RECHECK_DAYS)
-    return force or searched_at is None or searched_at < timezone.now() - recheck
+def recheck_after(anilist_id: int) -> timedelta:
+    """VECTOR_RECHECK_DAYS plus a stable per-anime offset of 0..SPREAD-1 days."""
+    spread = max(1, settings.VECTOR_RECHECK_SPREAD_DAYS)
+    return timedelta(days=settings.VECTOR_RECHECK_DAYS + anilist_id % spread)
+
+
+def _search_due(anilist_id: int, searched_at: datetime | None, force: bool) -> bool:
+    if force or searched_at is None:
+        return True
+    return searched_at < timezone.now() - recheck_after(anilist_id)
+
+
+def _search_budget_left(run_id: int, stage: str, force: bool) -> bool:
+    """False once this run has used VECTOR_SEARCHES_PER_RUN searches on this source
+    (reported once); refresh runs are never capped."""
+    if force:
+        return True
+    used = RunStage.objects.get(run_id=run_id, name=stage).counts.get("vector_searched", 0)
+    if used < settings.VECTOR_SEARCHES_PER_RUN:
+        return True
+    runs.record_item(
+        run_id,
+        stage,
+        f"vector search budget of {settings.VECTOR_SEARCHES_PER_RUN} reached; "
+        "the remaining unmatched anime are searched on later runs",
+        item_id="vector-search-budget",
+        kind="skipped",
+        unique=True,
+    )
+    return False
 
 
 def _is_refresh(run_id: int) -> bool:
@@ -249,7 +276,7 @@ def fetch_shikimori(
                 for i, m in maps.items()
                 if not m.mal_id
                 and m.shikimori_via != "override"
-                and _search_due(m.shikimori_searched_at, force)
+                and _search_due(i, m.shikimori_searched_at, force)
             ]
             media = load_raw(anilist.SOURCE, to_search) if to_search else {}
             for anilist_id in chunk:
@@ -258,7 +285,11 @@ def fetch_shikimori(
                 try:
                     if m and key:
                         _shikimori_fetch(run_id, c, m, key)
-                    elif m and str(anilist_id) in media:
+                    elif (
+                        m
+                        and str(anilist_id) in media
+                        and _search_budget_left(run_id, "fetch_shikimori", force)
+                    ):
                         _shikimori_match(run_id, c, m, media[str(anilist_id)].payload)
                 except ItemFailed as exc:
                     runs.record_item(
@@ -359,12 +390,14 @@ def fetch_annict(
             to_search = [
                 i
                 for i, m in maps.items()
-                if not m.annict_id and _search_due(m.annict_searched_at, force)
+                if not m.annict_id and _search_due(i, m.annict_searched_at, force)
             ]
             media = load_raw(anilist.SOURCE, to_search) if to_search else {}
             for anilist_id in sorted(to_search):
                 if str(anilist_id) not in media:
                     continue
+                if not _search_budget_left(run_id, "fetch_annict", force):
+                    break
                 try:
                     _annict_match(run_id, c, maps[anilist_id], media[str(anilist_id)].payload)
                 except ItemFailed as exc:

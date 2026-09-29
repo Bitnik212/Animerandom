@@ -176,6 +176,8 @@ From the repo root: `docker compose run --rm ingest-migrate`, then `docker compo
 | `INCREMENTAL_DAYS` | `3` | How far back an incremental run looks |
 | `VECTOR_MATCH_ACCEPT`, `VECTOR_MATCH_MARGIN`, `VECTOR_MATCH_REVIEW` | `0.80`, `0.08`, `0.60` | Vector matching thresholds (see Map IDs) |
 | `VECTOR_RECHECK_DAYS` | `30` | How long an unmatched anime waits before it is searched again |
+| `VECTOR_RECHECK_SPREAD_DAYS` | `7` | Adds 0 to 6 days by AniList id, so rechecks don't all come due on one run |
+| `VECTOR_SEARCHES_PER_RUN` | `300` | Title searches per run and source; the backlog drains over later runs. Refresh runs are not capped. |
 | `KEYCLOAK_INTERNAL_URL`, `KEYCLOAK_ISSUER`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID` | same as the API | For validating tokens on the ninja API |
 
 ## Celery design
@@ -323,7 +325,8 @@ AniList id ──(AniList's idMal)──> MAL id ──(same id)──> Shikimor
   - **Between `VECTOR_MATCH_REVIEW` (0.60) and accept:** not guessed. The run gets a `review` item listing the top candidates with their feature vectors. Fix it with an override (below).
   - **Below that:** nothing.
 - On Annict, a work whose own `malAnimeId` equals the anime's MAL id is accepted without scoring.
-- A search runs at most once per `VECTOR_RECHECK_DAYS` (30) per anime and source. A refresh of that anime searches again.
+- A search runs at most once per `VECTOR_RECHECK_DAYS` (30) per anime and source, plus a per-anime offset of up to `VECTOR_RECHECK_SPREAD_DAYS` (7). A refresh of that anime searches again.
+- Each run does at most `VECTOR_SEARCHES_PER_RUN` (300) searches per source. When the limit is hit the run logs a `skipped` item, and the backlog drains over later runs. The first runs after arm or a source change are the ones that hit it.
 
 Precedence, highest first:
 1. An admin override of `mal_id`, `shikimori_id`, or `annict_id` (an `anime_override` row without locale). A `shikimori_id` override is fetched directly instead of by MAL id.

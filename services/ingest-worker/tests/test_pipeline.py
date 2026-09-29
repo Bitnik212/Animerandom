@@ -399,3 +399,33 @@ def test_cross_reference_replaces_vector_match(eager_celery, sources, fake_es):
     run_pipeline(RunMode.REFRESH, anilist_ids=[100001])
     m = IdMapping.objects.get(anilist_id=100001)
     assert (m.mal_id, m.mal_via, m.mal_score) == (60001, "anilist", None)
+
+
+def test_vector_searches_are_capped_per_run_and_drain_later(
+    eager_celery, sources, fake_es, settings
+):
+    settings.VECTOR_SEARCHES_PER_RUN = 1
+    run = run_pipeline(RunMode.FULL, limit=6)
+    assert run.status == RunStatus.DONE, run.error
+    first = [s for s in sources.searches if s[0] == "annict"]
+    assert len(first) == 1
+    assert RunItemError.objects.filter(
+        run=run, stage="fetch_annict", item_id="vector-search-budget"
+    ).exists()
+
+    run_pipeline(RunMode.FULL, limit=6)  # the next run picks up where the budget stopped
+    second = [s for s in sources.searches if s[0] == "annict"][1:]
+    assert len(second) == 1 and second != first
+
+
+def test_refresh_ignores_the_search_budget(eager_celery, sources, fake_es, settings):
+    run_pipeline(RunMode.FULL, limit=6)
+    settings.VECTOR_SEARCHES_PER_RUN = 0
+    before = len(sources.searches)
+    run_pipeline(RunMode.REFRESH, anilist_ids=[21827])
+    assert ("annict", "境界の彼方") in sources.searches[before:]
+
+
+def test_rechecks_are_spread_by_anime(settings):
+    settings.VECTOR_RECHECK_DAYS, settings.VECTOR_RECHECK_SPREAD_DAYS = 30, 7
+    assert [stages.recheck_after(i).days for i in (7, 8, 13)] == [30, 31, 36]
