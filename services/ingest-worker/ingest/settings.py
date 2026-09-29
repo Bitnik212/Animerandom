@@ -133,6 +133,15 @@ ANILIST_ID_RANGE = env.int("ANILIST_ID_RANGE", default=5000)
 INCREMENTAL_DAYS = env.int("INCREMENTAL_DAYS", default=3)
 MERGE_BATCH_SIZE = 200
 
+# Vector matching when no id cross-reference links an anime to Shikimori or Annict
+# (pipeline/idmap/vector.py): accept at or above ACCEPT when ahead of the runner-up by
+# MARGIN; REVIEW..ACCEPT is reported on the run; a failed search is retried after
+# VECTOR_RECHECK_DAYS.
+VECTOR_MATCH_ACCEPT = env.float("VECTOR_MATCH_ACCEPT", default=0.80)
+VECTOR_MATCH_MARGIN = env.float("VECTOR_MATCH_MARGIN", default=0.08)
+VECTOR_MATCH_REVIEW = env.float("VECTOR_MATCH_REVIEW", default=0.60)
+VECTOR_RECHECK_DAYS = env.int("VECTOR_RECHECK_DAYS", default=30)
+
 # --- Auth for the ninja API -----------------------------------------------
 
 KEYCLOAK_INTERNAL_URL = env("KEYCLOAK_INTERNAL_URL", default="http://keycloak:8080")

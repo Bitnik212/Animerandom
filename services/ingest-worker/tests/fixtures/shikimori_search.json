@@ -1,0 +1,20 @@
+{
+ "ぼくらの日常": [
+  {
+   "id": 60001,
+   "name": "Bokura no Nichijou",
+   "russian": "Наши будни",
+   "kind": "ona",
+   "episodes": 40,
+   "aired_on": "2026-04-02"
+  },
+  {
+   "id": 60002,
+   "name": "Bokura no Nichijou Movie",
+   "russian": "Наши будни. Фильм",
+   "kind": "movie",
+   "episodes": 1,
+   "aired_on": "2027-03-01"
+  }
+ ]
+}
