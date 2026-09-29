@@ -154,7 +154,7 @@ Up to 500 candidates from the union of:
 2. Top ALS scores (if CF is enabled and the user has ≥ 3 interactions).
 3. Most popular anime in the user's liked genres (from onboarding and ratings).
 
-Per-source caps: 50 neighbors for each of the user's top 10 rated anime, the top 150 ALS scores, and the top 40 of each of the user's 3 most frequent genres among their liked anime. Every candidate is then scored on all three signals: content is its best cosine similarity to one of the user's top rated anime, which also gives `similar_to` its `anime_id`. Onboarding `likedGenres` aren't stored anywhere the engine can read yet, so liked genres come from ratings only.
+Per-source caps: 50 neighbors for each of the user's top 10 rated anime, the top 150 ALS scores, and the top 40 of each of the user's 3 most frequent genres among their liked anime. Every candidate is then scored on all three signals: content is its best cosine similarity to one of the user's top rated anime, which also gives `similar_to` its `anime_id`. Onboarding genres are stored in `app.app_user.liked_genres` / `disliked_genres` (arrays of genre slugs), but the engine doesn't read them yet, so liked genres come from ratings only.
 
 ### Blending
 

@@ -13,6 +13,8 @@ object AppUserTable : Table("app.app_user") {
     val onboardingCompletedAt = timestampWithTimeZone("onboarding_completed_at").nullable()
     val lastSeenAt = timestampWithTimeZone("last_seen_at").nullable()
     val createdAt = timestampWithTimeZone("created_at")
+    val likedGenres = array<String>("liked_genres")
+    val dislikedGenres = array<String>("disliked_genres")
     override val primaryKey = PrimaryKey(id)
 }
 

@@ -49,6 +49,24 @@ object CatalogStubs {
         )
     }
 
+    /** `items` is a JSON array body for `/v1/recommendations/{user}`. */
+    fun recommendations(user: java.util.UUID, items: String, status: Int = 200, delayMs: Int = 0) =
+        FakeKeycloak.server.stubFor(
+            get(urlPathEqualTo("/rec/v1/recommendations/$user")).willReturn(
+                KeycloakStubs
+                    .json(
+                        status,
+                        if (status ==
+                            200
+                        ) {
+                            """{"items":$items,"model":{"als":null,"embedding":"m"}}"""
+                        } else {
+                            "{}"
+                        },
+                    ).withFixedDelay(delayMs),
+            ),
+        )
+
     /** The pools the ingest worker would build from the fixture catalog (no adult #6, no removed #7). */
     fun seedPools() =
         Redis(TestInfra.redisUrl).use { redis ->

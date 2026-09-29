@@ -12,6 +12,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import picker.errors.Errors
+import java.util.UUID
 
 @Serializable
 data class SimilarItem(
@@ -21,6 +22,24 @@ data class SimilarItem(
 
 @Serializable
 data class SimilarResponse(val items: List<SimilarItem>)
+
+/** A reason carries only the field of its code: `anime_id` for `similar_to`, `genre` for `popular_in_genre`. */
+@Serializable
+data class RecReason(
+    val code: String,
+    @SerialName("anime_id") val animeId: Long? = null,
+    val genre: String? = null,
+)
+
+@Serializable
+data class RecItem(
+    @SerialName("anime_id") val animeId: Long,
+    val score: Double,
+    val reason: RecReason,
+)
+
+@Serializable
+data class RecResponse(val items: List<RecItem>)
 
 /**
  * The rec engine's internal HTTP API (services/rec-engine/README.md "Contract with the API").
@@ -53,5 +72,26 @@ class RecEngineClient(private val http: HttpClient, baseUrl: String, private val
             return null
         }
         return json.decodeFromString(SimilarResponse.serializer(), response.bodyAsText()).items.map { it.animeId }
+    }
+
+    /** The user's ranked feed, or `null` when the engine is slow, down, or answers garbage. */
+    suspend fun recommendations(userId: UUID, limit: Int): List<RecItem>? {
+        val response =
+            try {
+                http.get("$base/v1/recommendations/$userId") {
+                    parameter("limit", limit)
+                    timeout { requestTimeoutMillis = timeoutMs }
+                }
+            } catch (e: Exception) {
+                log.warn("Rec engine recommendations failed: {}", e.toString())
+                return null
+            }
+        if (!response.status.isSuccess()) {
+            log.warn("Rec engine recommendations returned HTTP {}", response.status.value)
+            return null
+        }
+        return runCatching { json.decodeFromString(RecResponse.serializer(), response.bodyAsText()).items }
+            .onFailure { log.warn("Unreadable rec engine response: {}", it.toString()) }
+            .getOrNull()
     }
 }
