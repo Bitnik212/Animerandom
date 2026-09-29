@@ -33,6 +33,8 @@ APP_MIGRATIONS = HERE.parent.parent / "api" / "src" / "main" / "resources" / "db
 def app_migrations() -> list[Path]:
     """V1__x.sql, V2__y.sql, ... in version order, as Flyway applies them."""
     return sorted(APP_MIGRATIONS.glob("V*__*.sql"), key=lambda p: int(p.name[1:].split("__")[0]))
+
+
 ADMIN_URL = os.environ.get("REC_TEST_POSTGRES_URL", "postgresql://postgres@127.0.0.1:5433/postgres")
 
 # Six genre clusters of ten anime each; the words make their synopses (and so their
