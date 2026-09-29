@@ -357,6 +357,8 @@ The API calls the rec engine, then hydrates and localizes results:
 3. Turn each reason code into text using `messages/` bundles, filling in the referenced anime's title in the user's locale.
 4. On timeout or error, fall back to the most popular non-excluded titles in the user's liked genres (or overall), with reason code `popular`. The client never sees an error for this endpoint because of the rec engine.
 
+`GET /anime/{id}/similar` calls `GET {REC_ENGINE_URL}/v1/similar/{id}?limit={limit}` and adds `includeAdult=true` only for a signed-in user with `showAdult`; by default the engine leaves adult titles out.
+
 Reason codes and their message keys:
 
 | Code | Extra fields | Message key |

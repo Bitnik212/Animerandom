@@ -1,5 +1,5 @@
 # Local stack. See README.md for the startup order.
-# The api and rec-engine services are added here when those services exist.
+# The api service is added here when it exists.
 
 x-ingest: &ingest
   build:
@@ -132,6 +132,20 @@ services:
     command: pytest
     profiles: ["test"]
 
+  rec-engine:
+    build: services/rec-engine
+    image: anime-picker/rec-engine:dev
+    environment:
+      POSTGRES_URL: postgresql://rec_svc:${REC_DB_PASSWORD}@postgres:5432/anime
+      MODEL_DIR: /data/models
+      NIGHTLY_AT: "04:30"
+    volumes:
+      - recmodels:/data/models
+    ports: ["8081:8081"]
+    depends_on:
+      ingest-migrate: { condition: service_completed_successfully }
+
 volumes:
   pgdata:
   esdata:
+  recmodels:
