@@ -1,0 +1,382 @@
+{
+ "data": {
+  "Page": {
+   "pageInfo": {
+    "hasNextPage": false
+   },
+   "media": [
+    {
+     "id": 16498,
+     "idMal": 16498,
+     "title": {
+      "romaji": "Shingeki no Kyojin",
+      "english": "Attack on Titan",
+      "native": "進撃の巨人"
+     },
+     "synonyms": [
+      "AoT",
+      "SnK",
+      "Атака титанов"
+     ],
+     "description": "Several hundred years ago, humans were nearly exterminated by titans.<br><br>\nTitans are typically several stories tall.<br>\n<br>\n(Source: Anime News Network)",
+     "format": "TV",
+     "status": "FINISHED",
+     "episodes": 25,
+     "duration": 24,
+     "season": "SPRING",
+     "seasonYear": 2013,
+     "averageScore": 85,
+     "meanScore": 81,
+     "popularity": 900000,
+     "isAdult": false,
+     "updatedAt": 1790000000,
+     "coverImage": {
+      "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498.jpg",
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx16498.jpg"
+     },
+     "genres": [
+      "Action",
+      "Drama",
+      "Fantasy",
+      "Mystery"
+     ],
+     "tags": [
+      {
+       "name": "Military",
+       "rank": 90,
+       "category": "Theme-Other",
+       "isGeneralSpoiler": false,
+       "isMediaSpoiler": false
+      },
+      {
+       "name": "Survival",
+       "rank": 88,
+       "category": "Theme-Other",
+       "isGeneralSpoiler": false,
+       "isMediaSpoiler": false
+      },
+      {
+       "name": "Tragedy",
+       "rank": 80,
+       "category": "Theme-Drama",
+       "isGeneralSpoiler": false,
+       "isMediaSpoiler": true
+      },
+      {
+       "name": "Male Protagonist",
+       "rank": 75,
+       "category": "Cast-Main Cast",
+       "isGeneralSpoiler": false,
+       "isMediaSpoiler": false
+      },
+      {
+       "name": "Shounen",
+       "rank": 70,
+       "category": "Demographic",
+       "isGeneralSpoiler": false,
+       "isMediaSpoiler": false
+      },
+      {
+       "name": "Gore",
+       "rank": 55,
+       "category": "Theme-Other",
+       "isGeneralSpoiler": false,
+       "isMediaSpoiler": false
+      },
+      {
+       "name": "Kaiju",
+       "rank": 65,
+       "category": "Theme-Other",
+       "isGeneralSpoiler": false,
+       "isMediaSpoiler": false
+      }
+     ],
+     "studios": {
+      "edges": [
+       {
+        "isMain": true,
+        "node": {
+         "id": 858,
+         "name": "Wit Studio",
+         "isAnimationStudio": true
+        }
+       },
+       {
+        "isMain": false,
+        "node": {
+         "id": 143,
+         "name": "Pony Canyon",
+         "isAnimationStudio": false
+        }
+       }
+      ]
+     },
+     "relations": {
+      "edges": [
+       {
+        "relationType": "SEQUEL",
+        "node": {
+         "id": 20958,
+         "type": "ANIME"
+        }
+       },
+       {
+        "relationType": "SOURCE",
+        "node": {
+         "id": 53390,
+         "type": "MANGA"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "id": 20958,
+     "idMal": 25777,
+     "title": {
+      "romaji": "Shingeki no Kyojin Season 2",
+      "english": "Attack on Titan Season 2",
+      "native": "進撃の巨人 Season2"
+     },
+     "synonyms": [],
+     "description": "The second season of <i>Shingeki no Kyojin</i>.",
+     "format": "TV",
+     "status": "FINISHED",
+     "episodes": 12,
+     "duration": 24,
+     "season": "SPRING",
+     "seasonYear": 2017,
+     "averageScore": 84,
+     "meanScore": 81,
+     "popularity": 600000,
+     "isAdult": false,
+     "updatedAt": 1790000000,
+     "coverImage": {
+      "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20958.jpg",
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx20958.jpg"
+     },
+     "genres": [
+      "Action",
+      "Drama"
+     ],
+     "tags": [
+      {
+       "name": "Military",
+       "rank": 85,
+       "category": "Theme-Other",
+       "isGeneralSpoiler": false,
+       "isMediaSpoiler": false
+      }
+     ],
+     "studios": {
+      "edges": [
+       {
+        "isMain": true,
+        "node": {
+         "id": 858,
+         "name": "Wit Studio",
+         "isAnimationStudio": true
+        }
+       }
+      ]
+     },
+     "relations": {
+      "edges": [
+       {
+        "relationType": "PREQUEL",
+        "node": {
+         "id": 16498,
+         "type": "ANIME"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "id": 9253,
+     "idMal": 9253,
+     "title": {
+      "romaji": "Steins;Gate",
+      "english": "Steins;Gate",
+      "native": "STEINS;GATE"
+     },
+     "synonyms": [
+      "シュタインズ・ゲート"
+     ],
+     "description": "Eccentric scientist Rintarou Okabe has a never-ending thirst for scientific exploration.",
+     "format": "TV",
+     "status": "FINISHED",
+     "episodes": 24,
+     "duration": 24,
+     "season": "SPRING",
+     "seasonYear": 2011,
+     "averageScore": 89,
+     "meanScore": 81,
+     "popularity": 800000,
+     "isAdult": false,
+     "updatedAt": 1790000000,
+     "coverImage": {
+      "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx9253.jpg",
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx9253.jpg"
+     },
+     "genres": [
+      "Drama",
+      "Sci-Fi",
+      "Psychological",
+      "Thriller"
+     ],
+     "tags": [
+      {
+       "name": "Time Travel",
+       "rank": 98,
+       "category": "Theme-Sci-Fi",
+       "isGeneralSpoiler": false,
+       "isMediaSpoiler": false
+      },
+      {
+       "name": "Male Protagonist",
+       "rank": 90,
+       "category": "Cast-Main Cast",
+       "isGeneralSpoiler": false,
+       "isMediaSpoiler": false
+      }
+     ],
+     "studios": {
+      "edges": [
+       {
+        "isMain": true,
+        "node": {
+         "id": 314,
+         "name": "White Fox",
+         "isAnimationStudio": true
+        }
+       }
+      ]
+     },
+     "relations": {
+      "edges": []
+     }
+    },
+    {
+     "id": 21827,
+     "idMal": 34599,
+     "title": {
+      "romaji": "Kyoukai no Kanata Movie",
+      "english": null,
+      "native": "境界の彼方"
+     },
+     "synonyms": [],
+     "description": "Short.",
+     "format": "MOVIE",
+     "status": "FINISHED",
+     "episodes": 1,
+     "duration": 90,
+     "season": null,
+     "seasonYear": 2015,
+     "averageScore": null,
+     "meanScore": 72,
+     "popularity": 50000,
+     "isAdult": false,
+     "updatedAt": 1790000000,
+     "coverImage": {
+      "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21827.jpg",
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx21827.jpg"
+     },
+     "genres": [
+      "Fantasy",
+      "Slice of Life",
+      "Some New Genre"
+     ],
+     "tags": [],
+     "studios": {
+      "edges": [
+       {
+        "isMain": true,
+        "node": {
+         "id": 2,
+         "name": "Kyoto Animation",
+         "isAnimationStudio": true
+        }
+       }
+      ]
+     },
+     "relations": {
+      "edges": []
+     }
+    },
+    {
+     "id": 100001,
+     "idMal": null,
+     "title": {
+      "romaji": null,
+      "english": null,
+      "native": "ぼくらの日常"
+     },
+     "synonyms": [],
+     "description": null,
+     "format": "ONA",
+     "status": "RELEASING",
+     "episodes": 40,
+     "duration": 24,
+     "season": "SPRING",
+     "seasonYear": 2026,
+     "averageScore": 70,
+     "meanScore": 70,
+     "popularity": 1000,
+     "isAdult": false,
+     "updatedAt": 1790000000,
+     "coverImage": {
+      "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx100001.jpg",
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx100001.jpg"
+     },
+     "genres": [
+      "Comedy"
+     ],
+     "tags": [],
+     "studios": {
+      "edges": []
+     },
+     "relations": {
+      "edges": []
+     }
+    },
+    {
+     "id": 100002,
+     "idMal": 100002,
+     "title": {
+      "romaji": "Adult Title",
+      "english": "Adult Title",
+      "native": null
+     },
+     "synonyms": [],
+     "description": "An adult title used to test pools and the index.",
+     "format": "OVA",
+     "status": "FINISHED",
+     "episodes": 2,
+     "duration": 24,
+     "season": "SPRING",
+     "seasonYear": 1998,
+     "averageScore": 60,
+     "meanScore": 81,
+     "popularity": 500,
+     "isAdult": true,
+     "updatedAt": 1790000000,
+     "coverImage": {
+      "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx100002.jpg",
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx100002.jpg"
+     },
+     "genres": [
+      "Hentai"
+     ],
+     "tags": [],
+     "studios": {
+      "edges": []
+     },
+     "relations": {
+      "edges": []
+     }
+    }
+   ]
+  }
+ }
+}
