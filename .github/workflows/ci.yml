@@ -32,12 +32,57 @@ jobs:
               - "services/ingest-worker/contract/**"
               - ".github/workflows/ci.yml"
 
-  # Service jobs go here, each with `needs: changes` and
-  # `if: needs.changes.outputs.<service> == 'true'`, and are listed in ci-ok's needs.
+  # Each service job: `needs: changes`, `if: needs.changes.outputs.<service> == 'true'`,
+  # and listed in ci-ok's needs.
+
+  ingest-worker:
+    needs: changes
+    if: needs.changes.outputs.ingest-worker == 'true'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: services/ingest-worker
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: anime
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 20
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 20
+    env:
+      DJANGO_SECRET_KEY: ci-only
+      # The admin role: tests create their own database.
+      POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/anime
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: services/ingest-worker/uv.lock
+      - name: Install PostgreSQL 16 client (pg_dump for the contract test)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q postgresql-client-16
+          echo "/usr/lib/postgresql/16/bin" >> "$GITHUB_PATH"
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy .
+      - run: uv run pytest
 
   ci-ok:
     if: always()
-    needs: [changes]
+    needs: [changes, ingest-worker]
     runs-on: ubuntu-24.04
     steps:
       - name: Every needed job passed or was skipped

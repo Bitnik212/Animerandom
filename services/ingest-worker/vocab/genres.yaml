@@ -1,0 +1,59 @@
+# Controlled genre vocabulary. Source names map to stable slugs; names are per locale.
+# Edit, then run `manage.py ingest_vocab`. Elasticsearch stores slugs only, so no reindex.
+- slug: action
+  sources: { anilist: "Action" }
+  names: { en: Action, ru: Экшен, ja: アクション, ja_latn: Akushon }
+- slug: adventure
+  sources: { anilist: "Adventure" }
+  names: { en: Adventure, ru: Приключения, ja: 冒険, ja_latn: Bōken }
+- slug: comedy
+  sources: { anilist: "Comedy" }
+  names: { en: Comedy, ru: Комедия, ja: コメディ, ja_latn: Komedi }
+- slug: drama
+  sources: { anilist: "Drama" }
+  names: { en: Drama, ru: Драма, ja: ドラマ, ja_latn: Dorama }
+- slug: ecchi
+  sources: { anilist: "Ecchi" }
+  names: { en: Ecchi, ru: Этти, ja: エッチ, ja_latn: Etchi }
+- slug: fantasy
+  sources: { anilist: "Fantasy" }
+  names: { en: Fantasy, ru: Фэнтези, ja: ファンタジー, ja_latn: Fantajī }
+- slug: hentai
+  sources: { anilist: "Hentai" }
+  names: { en: Hentai, ru: Хентай, ja: 成人向け, ja_latn: Seijin-muke }
+- slug: horror
+  sources: { anilist: "Horror" }
+  names: { en: Horror, ru: Ужасы, ja: ホラー, ja_latn: Horā }
+- slug: mahou-shoujo
+  sources: { anilist: "Mahou Shoujo" }
+  names: { en: Magical Girl, ru: Махо-сёдзё, ja: 魔法少女, ja_latn: Mahō Shōjo }
+- slug: mecha
+  sources: { anilist: "Mecha" }
+  names: { en: Mecha, ru: Меха, ja: ロボット, ja_latn: Robotto }
+- slug: music
+  sources: { anilist: "Music" }
+  names: { en: Music, ru: Музыка, ja: 音楽, ja_latn: Ongaku }
+- slug: mystery
+  sources: { anilist: "Mystery" }
+  names: { en: Mystery, ru: Детектив, ja: ミステリー, ja_latn: Misuterī }
+- slug: psychological
+  sources: { anilist: "Psychological" }
+  names: { en: Psychological, ru: Психологическое, ja: 心理, ja_latn: Shinri }
+- slug: romance
+  sources: { anilist: "Romance" }
+  names: { en: Romance, ru: Романтика, ja: 恋愛, ja_latn: Ren'ai }
+- slug: sci-fi
+  sources: { anilist: "Sci-Fi" }
+  names: { en: Sci-Fi, ru: Фантастика, ja: SF, ja_latn: Esu Efu }
+- slug: slice-of-life
+  sources: { anilist: "Slice of Life" }
+  names: { en: Slice of Life, ru: Повседневность, ja: 日常, ja_latn: Nichijō }
+- slug: sports
+  sources: { anilist: "Sports" }
+  names: { en: Sports, ru: Спорт, ja: スポーツ, ja_latn: Supōtsu }
+- slug: supernatural
+  sources: { anilist: "Supernatural" }
+  names: { en: Supernatural, ru: Сверхъестественное, ja: 超常, ja_latn: Chōjō }
+- slug: thriller
+  sources: { anilist: "Thriller" }
+  names: { en: Thriller, ru: Триллер, ja: スリラー, ja_latn: Surirā }
