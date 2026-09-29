@@ -8,7 +8,7 @@ from typing import Any, Literal
 from celery import current_app
 from django.db import connections
 from django.http import HttpRequest, HttpResponse
-from ninja import NinjaAPI, Schema, Status
+from ninja import NinjaAPI, Query, Schema, Status
 from ninja.errors import AuthenticationError, HttpError, ValidationError
 
 from ingest.auth import KeycloakAdmin, Problem
@@ -158,11 +158,15 @@ def start_run(request: HttpRequest, body: RunRequest) -> Status:
 
 
 @api.get("/runs", response=list[RunOut])
-def list_runs(request: HttpRequest, status: RunStatus | None = None, limit: int = 50) -> list[dict]:
+def list_runs(
+    request: HttpRequest,
+    status: RunStatus | None = None,
+    limit: int = Query(50, ge=1, le=200),
+) -> list[dict]:
     qs = IngestRun.objects.all()
     if status:
         qs = qs.filter(status=status)
-    return [_run_out(r) for r in qs[: min(limit, 200)]]
+    return [_run_out(r) for r in qs[:limit]]
 
 
 @api.get("/runs/{run_id}", response=RunDetail)

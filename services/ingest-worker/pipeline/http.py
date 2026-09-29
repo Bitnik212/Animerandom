@@ -77,6 +77,11 @@ return tostring(wait)
 """
 
 
+@cache
+def _take_token_script(client: redis.Redis) -> Any:
+    return client.register_script(_TAKE_TOKEN)
+
+
 @dataclass
 class TokenBucket:
     source: str
@@ -92,7 +97,7 @@ class TokenBucket:
         return max(1.0, self.per_minute / 30)
 
     def try_take(self) -> float:
-        script = redis_client().register_script(_TAKE_TOKEN)
+        script = _take_token_script(redis_client())
         return float(
             script(keys=[self.key], args=[self.capacity, self.per_minute / 60, time.time()])
         )

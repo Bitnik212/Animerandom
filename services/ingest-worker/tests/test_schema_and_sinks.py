@@ -104,3 +104,45 @@ def test_idmap_prefers_anilist_and_fills_gaps():
     )  # arm via MAL id
     assert by_id[4].mal_id is None and by_id[4].annict_id is None
     assert result.conflicts == [(2, "MAL id: AniList says 22, arm says 999")]
+
+
+@pytest.mark.django_db(databases=DATABASES, transaction=True)
+def test_concurrent_batches_claiming_one_mal_id_do_not_fail():
+    """Two merge shards writing anime that resolve to the same MAL id at the same time:
+    one keeps it, the other is stored without it and reports a conflict."""
+    import threading
+
+    from django.db import connections as conns
+
+    from pipeline.merge.precedence import MergeInput, merge
+    from pipeline.sinks.postgres import write_batch
+    from pipeline.sources.anilist import Media
+
+    def merged(anilist_id: int):
+        m = merge(
+            MergeInput(Media(id=anilist_id, title={"romaji": f"Title {anilist_id}"}), mal_id=777)
+        )
+        return [(m, f"hash-{anilist_id}")]
+
+    barrier = threading.Barrier(2)
+    results, errors = [], []
+
+    def shard(anilist_id: int) -> None:
+        try:
+            barrier.wait()
+            results.append(write_batch(merged(anilist_id)))
+        except Exception as exc:  # pragma: no cover - the failure being guarded against
+            errors.append(exc)
+        finally:
+            conns.close_all()
+
+    threads = [threading.Thread(target=shard, args=(i,)) for i in (501, 502)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    assert Anime.objects.filter(mal_id=777).count() == 1
+    assert Anime.objects.filter(anilist_id__in=[501, 502]).count() == 2
+    assert sum(len(r.conflicts) for r in results) == 1

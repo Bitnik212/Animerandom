@@ -126,7 +126,12 @@ class AnimeAdmin(ReadOnlyAdmin):
         )
 
     def has_change_permission(self, request: HttpRequest, obj: Any = None) -> bool:
-        return True  # every field is read-only; only the override inline can change
+        # Every field is read-only; the form exists for the override inline, which
+        # checks its own add/change/delete permissions.
+        user = request.user
+        return user.has_perm("catalog.change_anime") or user.has_perm(
+            "catalog.change_animeoverride"
+        )
 
     def save_formset(self, request: HttpRequest, form: Any, formset: Any, change: bool) -> None:
         instances = formset.save(commit=False)

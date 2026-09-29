@@ -24,6 +24,8 @@ from catalog.models import (
 from pipeline.merge.precedence import MergedAnime
 
 DB = "catalog"
+# Serializes MAL id claims across concurrent merge shards (pg_advisory_xact_lock key).
+MAL_CLAIM_LOCK = 0x696E6D31  # "inm1"
 ANIME_UPDATE_FIELDS = [
     "mal_id",
     "shikimori_id",
@@ -76,6 +78,10 @@ def write_batch(batch: list[tuple[MergedAnime, str]]) -> WriteResult:
         return result
     merged = [m for m, _ in batch]
     with transaction.atomic(using=DB):
+        # Shards write concurrently; without this, two of them can both see a MAL id as
+        # free and the second commit fails on the unique constraint. Held until commit.
+        with connections[DB].cursor() as cursor:
+            cursor.execute("SELECT pg_advisory_xact_lock(%s)", [MAL_CLAIM_LOCK])
         _dedupe_mal_ids(merged, result)
         # Free MAL ids that this batch moves away from, before claiming new ones.
         Anime.objects.filter(anilist_id__in=[m.anilist_id for m in merged]).update(mal_id=None)

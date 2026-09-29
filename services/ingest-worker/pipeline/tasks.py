@@ -60,6 +60,7 @@ def pipeline_task(stage: str | None = None, **options: Any) -> Callable:
 def _guard(run_id: int, stage: str | None) -> None:
     if runs.should_stop(run_id):
         raise Ignore()
+    runs.refresh_lock(run_id)
     if stage:
         runs.stage_started(run_id, stage)
 

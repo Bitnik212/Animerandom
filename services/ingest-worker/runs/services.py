@@ -75,6 +75,21 @@ def create_run(mode: str, params: dict | None = None) -> IngestRun:
     return run
 
 
+# Extends the lock only while it still belongs to this run.
+_REFRESH_LOCK = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+return 0
+"""
+
+
+def refresh_lock(run_id: int) -> bool:
+    """Push the lock's expiry out while the run is alive. LOCK_TTL then only bounds how
+    long a dead run (crashed worker, lost tasks) can block new runs."""
+    return bool(redis_client().eval(_REFRESH_LOCK, 1, LOCK_KEY, str(run_id), LOCK_TTL))
+
+
 def release_lock(run_id: int) -> None:
     r = redis_client()
     if r.get(LOCK_KEY) == str(run_id):

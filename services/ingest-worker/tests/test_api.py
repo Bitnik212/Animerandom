@@ -197,3 +197,10 @@ def test_healthz_needs_no_token():
     response = call("get", "/healthz")
     assert response.json()["checks"]["postgres.catalog"] == "ok"
     assert response.json()["checks"]["redis"] == "ok"
+
+
+@pytest.mark.parametrize("limit", ["0", "-1", "201"])
+def test_list_limit_is_validated(settings, limit):
+    response = call("get", f"/runs?limit={limit}", token(settings))
+    assert response.status_code == 422
+    assert response.json()["type"] == "invalid-request"

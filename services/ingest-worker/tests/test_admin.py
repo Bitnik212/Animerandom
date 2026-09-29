@@ -81,3 +81,28 @@ def test_vocab_pages(admin_client):
     vocab.sync()
     page = admin_client.get("/admin/catalog/genre/")
     assert page.status_code == 200 and "Повседневность" in page.text
+
+
+def test_view_only_staff_cannot_change_overrides(anime, monkeypatch):
+    from django.contrib.auth.models import Permission
+
+    started = []
+    monkeypatch.setattr(orchestration, "start", lambda *a, **k: started.append(a))
+    viewer = User.objects.create_user("viewer", password="pw", is_staff=True)
+    viewer.user_permissions.add(Permission.objects.get(codename="view_anime"))
+    client = Client()
+    client.force_login(viewer)
+
+    assert client.get(f"/admin/catalog/anime/{anime.id}/change/").status_code == 200
+    response = client.post(
+        f"/admin/catalog/anime/{anime.id}/change/",
+        {
+            "overrides-TOTAL_FORMS": "1",
+            "overrides-INITIAL_FORMS": "0",
+            "overrides-0-field": "title",
+            "overrides-0-locale": "en",
+            "overrides-0-value": "hijacked",
+        },
+    )
+    assert response.status_code == 403
+    assert not AnimeOverride.objects.exists() and started == []
