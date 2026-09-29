@@ -29,6 +29,11 @@ git rebase --onto origin/main <lower-pr-branch> <your-branch>
 git push --force-with-lease
 ```
 
+Retarget the PR on GitHub **before** pushing the rebased branch. GitHub runs CI only on
+pushes, not on a base change, and a push against the old base can't be test-merged.
+If you did it the other way round, start CI by hand: Actions → ci → Run workflow, on your
+branch.
+
 ## Commits and PR titles
 
 Use [Conventional Commits](https://www.conventionalcommits.org/) with the scope:

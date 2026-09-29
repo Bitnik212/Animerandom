@@ -6,6 +6,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Manual runs: retargeting a PR (e.g. a stacked PR after its base merged) changes
+  # nothing GitHub runs CI for. "Run workflow" on the PR branch attaches ci-ok to its head.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
