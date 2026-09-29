@@ -1,0 +1,148 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "filter": {
+        "ru_stop": {
+          "type": "stop",
+          "stopwords": "_russian_"
+        },
+        "ru_stemmer": {
+          "type": "stemmer",
+          "language": "russian"
+        }
+      },
+      "analyzer": {
+        "ru_text": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": [
+            "lowercase",
+            "ru_stop",
+            "ru_stemmer"
+          ]
+        },
+        "ja_text": {
+          "type": "custom",
+          "tokenizer": "kuromoji_tokenizer",
+          "filter": [
+            "kuromoji_baseform",
+            "cjk_width",
+            "lowercase"
+          ]
+        },
+        "latn_text": {
+          "type": "custom",
+          "tokenizer": "icu_tokenizer",
+          "filter": [
+            "icu_folding"
+          ]
+        },
+        "en_text": {
+          "type": "english"
+        }
+      }
+    }
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "id": {
+        "type": "long"
+      },
+      "title": {
+        "properties": {
+          "en": {
+            "type": "text",
+            "analyzer": "latn_text"
+          },
+          "ru": {
+            "type": "text",
+            "analyzer": "ru_text"
+          },
+          "ja": {
+            "type": "text",
+            "analyzer": "ja_text"
+          },
+          "ja_latn": {
+            "type": "text",
+            "analyzer": "latn_text"
+          }
+        }
+      },
+      "synonyms": {
+        "type": "text",
+        "analyzer": "latn_text",
+        "fields": {
+          "ja": {
+            "type": "text",
+            "analyzer": "ja_text"
+          }
+        }
+      },
+      "synopsis": {
+        "properties": {
+          "en": {
+            "type": "text",
+            "analyzer": "en_text"
+          },
+          "ru": {
+            "type": "text",
+            "analyzer": "ru_text"
+          },
+          "ja": {
+            "type": "text",
+            "analyzer": "ja_text"
+          }
+        }
+      },
+      "title_suggest": {
+        "type": "search_as_you_type",
+        "analyzer": "latn_text",
+        "fields": {
+          "ja": {
+            "type": "text",
+            "analyzer": "ja_text"
+          }
+        }
+      },
+      "genres": {
+        "type": "keyword"
+      },
+      "tags": {
+        "type": "keyword"
+      },
+      "studios": {
+        "type": "keyword"
+      },
+      "format": {
+        "type": "keyword"
+      },
+      "status": {
+        "type": "keyword"
+      },
+      "season_year": {
+        "type": "integer"
+      },
+      "decade": {
+        "type": "keyword"
+      },
+      "length": {
+        "type": "keyword"
+      },
+      "episodes": {
+        "type": "integer"
+      },
+      "score": {
+        "type": "float"
+      },
+      "popularity": {
+        "type": "integer"
+      },
+      "is_adult": {
+        "type": "boolean"
+      }
+    }
+  }
+}
