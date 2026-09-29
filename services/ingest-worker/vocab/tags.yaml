@@ -1,0 +1,67 @@
+# Controlled tag vocabulary: a starter set of common AniList tags.
+# AniList tags that aren't listed here are skipped and logged on the run; add them here
+# (slug, source name, translated names), then run `manage.py ingest_vocab`.
+# `spoiler: true` marks a tag as a spoiler everywhere; AniList's isGeneralSpoiler also sets it.
+# Names missing for a locale fall back at read time, like titles do.
+- { slug: male-protagonist, sources: { anilist: "Male Protagonist" }, names: { en: Male Protagonist, ru: Главный герой — мужчина, ja: 男性主人公 } }
+- { slug: female-protagonist, sources: { anilist: "Female Protagonist" }, names: { en: Female Protagonist, ru: Главная героиня, ja: 女性主人公 } }
+- { slug: ensemble-cast, sources: { anilist: "Ensemble Cast" }, names: { en: Ensemble Cast, ru: Ансамблевый состав, ja: 群像劇 } }
+- { slug: primarily-female-cast, sources: { anilist: "Primarily Female Cast" }, names: { en: Primarily Female Cast, ru: В основном женские персонажи, ja: 女性キャラ中心 } }
+- { slug: primarily-male-cast, sources: { anilist: "Primarily Male Cast" }, names: { en: Primarily Male Cast, ru: В основном мужские персонажи, ja: 男性キャラ中心 } }
+- { slug: shounen, sources: { anilist: "Shounen" }, names: { en: Shounen, ru: Сёнэн, ja: 少年 } }
+- { slug: shoujo, sources: { anilist: "Shoujo" }, names: { en: Shoujo, ru: Сёдзё, ja: 少女 } }
+- { slug: seinen, sources: { anilist: "Seinen" }, names: { en: Seinen, ru: Сэйнэн, ja: 青年 } }
+- { slug: josei, sources: { anilist: "Josei" }, names: { en: Josei, ru: Дзёсэй, ja: 女性 } }
+- { slug: kids, sources: { anilist: "Kids" }, names: { en: Kids, ru: Детское, ja: 子供向け } }
+- { slug: school, sources: { anilist: "School" }, names: { en: School, ru: Школа, ja: 学校 } }
+- { slug: school-club, sources: { anilist: "School Club" }, names: { en: School Club, ru: Школьный клуб, ja: 部活 } }
+- { slug: workplace, sources: { anilist: "Workplace" }, names: { en: Workplace, ru: Работа, ja: 職場 } }
+- { slug: urban-fantasy, sources: { anilist: "Urban Fantasy" }, names: { en: Urban Fantasy, ru: Городское фэнтези, ja: 現代ファンタジー } }
+- { slug: isekai, sources: { anilist: "Isekai" }, names: { en: Isekai, ru: Исекай, ja: 異世界 } }
+- { slug: reincarnation, sources: { anilist: "Reincarnation" }, names: { en: Reincarnation, ru: Перерождение, ja: 転生 } }
+- { slug: magic, sources: { anilist: "Magic" }, names: { en: Magic, ru: Магия, ja: 魔法 } }
+- { slug: super-power, sources: { anilist: "Super Power" }, names: { en: Super Power, ru: Суперспособности, ja: 超能力 } }
+- { slug: mythology, sources: { anilist: "Mythology" }, names: { en: Mythology, ru: Мифология, ja: 神話 } }
+- { slug: gods, sources: { anilist: "Gods" }, names: { en: Gods, ru: Боги, ja: 神 } }
+- { slug: demons, sources: { anilist: "Demons" }, names: { en: Demons, ru: Демоны, ja: 悪魔 } }
+- { slug: vampire, sources: { anilist: "Vampire" }, names: { en: Vampire, ru: Вампиры, ja: 吸血鬼 } }
+- { slug: zombie, sources: { anilist: "Zombie" }, names: { en: Zombie, ru: Зомби, ja: ゾンビ } }
+- { slug: aliens, sources: { anilist: "Aliens" }, names: { en: Aliens, ru: Пришельцы, ja: 宇宙人 } }
+- { slug: dungeon, sources: { anilist: "Dungeon" }, names: { en: Dungeon, ru: Подземелье, ja: ダンジョン } }
+- { slug: military, sources: { anilist: "Military" }, names: { en: Military, ru: Военное, ja: ミリタリー } }
+- { slug: survival, sources: { anilist: "Survival" }, names: { en: Survival, ru: Выживание, ja: サバイバル } }
+- { slug: time-travel, sources: { anilist: "Time Travel" }, names: { en: Time Travel, ru: Путешествия во времени, ja: タイムトラベル } }
+- { slug: space, sources: { anilist: "Space" }, names: { en: Space, ru: Космос, ja: 宇宙 } }
+- { slug: post-apocalyptic, sources: { anilist: "Post-Apocalyptic" }, names: { en: Post-Apocalyptic, ru: Постапокалипсис, ja: ポストアポカリプス } }
+- { slug: dystopian, sources: { anilist: "Dystopian" }, names: { en: Dystopian, ru: Антиутопия, ja: ディストピア } }
+- { slug: cyberpunk, sources: { anilist: "Cyberpunk" }, names: { en: Cyberpunk, ru: Киберпанк, ja: サイバーパンク } }
+- { slug: robots, sources: { anilist: "Robots" }, names: { en: Robots, ru: Роботы, ja: ロボット } }
+- { slug: martial-arts, sources: { anilist: "Martial Arts" }, names: { en: Martial Arts, ru: Боевые искусства, ja: 武術 } }
+- { slug: swordplay, sources: { anilist: "Swordplay" }, names: { en: Swordplay, ru: Фехтование, ja: 剣術 } }
+- { slug: guns, sources: { anilist: "Guns" }, names: { en: Guns, ru: Огнестрельное оружие, ja: 銃 } }
+- { slug: samurai, sources: { anilist: "Samurai" }, names: { en: Samurai, ru: Самураи, ja: 侍 } }
+- { slug: ninja, sources: { anilist: "Ninja" }, names: { en: Ninja, ru: Ниндзя, ja: 忍者 } }
+- { slug: detective, sources: { anilist: "Detective" }, names: { en: Detective, ru: Детективы, ja: 探偵 } }
+- { slug: crime, sources: { anilist: "Crime" }, names: { en: Crime, ru: Криминал, ja: 犯罪 } }
+- { slug: politics, sources: { anilist: "Politics" }, names: { en: Politics, ru: Политика, ja: 政治 } }
+- { slug: philosophy, sources: { anilist: "Philosophy" }, names: { en: Philosophy, ru: Философия, ja: 哲学 } }
+- { slug: tragedy, sources: { anilist: "Tragedy" }, names: { en: Tragedy, ru: Трагедия, ja: 悲劇 } }
+- { slug: coming-of-age, sources: { anilist: "Coming of Age" }, names: { en: Coming of Age, ru: Взросление, ja: 成長 } }
+- { slug: revenge, sources: { anilist: "Revenge" }, names: { en: Revenge, ru: Месть, ja: 復讐 } }
+- { slug: found-family, sources: { anilist: "Found Family" }, names: { en: Found Family, ru: Обретённая семья, ja: 疑似家族 } }
+- { slug: iyashikei, sources: { anilist: "Iyashikei" }, names: { en: Iyashikei, ru: Иясикэй, ja: 癒し系 } }
+- { slug: cgdct, sources: { anilist: "Cute Girls Doing Cute Things" }, names: { en: Cute Girls Doing Cute Things, ru: Милые девушки, ja: 日常系 } }
+- { slug: harem, sources: { anilist: "Harem" }, names: { en: Harem, ru: Гарем, ja: ハーレム } }
+- { slug: love-triangle, sources: { anilist: "Love Triangle" }, names: { en: Love Triangle, ru: Любовный треугольник, ja: 三角関係 } }
+- { slug: parody, sources: { anilist: "Parody" }, names: { en: Parody, ru: Пародия, ja: パロディ } }
+- { slug: gore, sources: { anilist: "Gore" }, names: { en: Gore, ru: Жестокость, ja: ゴア } }
+- { slug: episodic, sources: { anilist: "Episodic" }, names: { en: Episodic, ru: Эпизодический сюжет, ja: 一話完結 } }
+- { slug: historical, sources: { anilist: "Historical" }, names: { en: Historical, ru: Исторический, ja: 歴史 } }
+- { slug: video-games, sources: { anilist: "Video Games" }, names: { en: Video Games, ru: Видеоигры, ja: ビデオゲーム } }
+- { slug: band, sources: { anilist: "Band" }, names: { en: Band, ru: Музыкальная группа, ja: バンド } }
+- { slug: idol, sources: { anilist: "Idol" }, names: { en: Idol, ru: Айдолы, ja: アイドル } }
+- { slug: cooking, sources: { anilist: "Food" }, names: { en: Food, ru: Кулинария, ja: 料理 } }
+- { slug: baseball, sources: { anilist: "Baseball" }, names: { en: Baseball, ru: Бейсбол, ja: 野球 } }
+- { slug: basketball, sources: { anilist: "Basketball" }, names: { en: Basketball, ru: Баскетбол, ja: バスケットボール } }
+- { slug: football, sources: { anilist: "Football" }, names: { en: Football, ru: Футбол, ja: サッカー } }
+- { slug: volleyball, sources: { anilist: "Volleyball" }, names: { en: Volleyball, ru: Волейбол, ja: バレーボール } }

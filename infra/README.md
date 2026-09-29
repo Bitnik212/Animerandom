@@ -129,6 +129,8 @@ The default privileges mean a new catalog table is readable by the API the momen
 
 `raw_source_record` lets the worker re-run merging and localization without refetching anything.
 
+The exact columns (including helper columns such as `anime.merge_hash`, `anime_tag.is_spoiler`, and `studio.anilist_id`) are in `services/ingest-worker/contract/catalog-schema.sql`, which is regenerated with every catalog migration.
+
 **Schema `ingest` (owner: ingest-worker)**
 
 Django's own tables (admin users, sessions, content types), Celery beat schedules, Celery task results, and run history (`runs_ingestrun`, `runs_runstage`). Private to the ingest worker.

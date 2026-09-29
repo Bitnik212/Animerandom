@@ -1,0 +1,80 @@
+[project]
+name = "ingest-worker"
+version = "0.1.0"
+description = "Anime Picker catalog pipeline: fetch, map, merge, localize, index"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "django>=5.2,<5.3",
+    "django-environ>=0.12",
+    "django-ninja>=1.4",
+    "celery[redis]>=5.5,<6",
+    "django-celery-beat>=2.8",
+    "django-celery-results>=2.6",
+    "httpx>=0.28",
+    "pydantic>=2.10",
+    "psycopg[binary]>=3.2",
+    "elasticsearch>=8.15,<9",
+    "redis>=5.2",
+    "cutlet>=0.5",
+    "unidic-lite>=1.0.8",
+    "pykakasi>=2.3",
+    "selectolax>=0.3.27",
+    "pyjwt[crypto]>=2.10",
+    "pyyaml>=6.0",
+    "gunicorn>=23",
+    "uvicorn>=0.34",
+    "whitenoise>=6.8",
+]
+
+[project.optional-dependencies]
+flower = ["flower>=2.0"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-django>=4.10",
+    "respx>=0.22",
+    "ruff>=0.9",
+    "mypy>=1.14",
+    "django-stubs[compatible-mypy]>=5.1",
+    "celery-types>=0.23",
+    "types-pyyaml>=6.0",
+    "types-redis>=4.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "ingest.settings"
+addopts = "-ra"
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:celery.*",
+    "ignore:No directory at:UserWarning",  # tests run without collected static files
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "SIM", "RUF"]
+ignore = [
+    "RUF012",  # mutable class attributes are Django/ninja idiom
+    "DJ001",   # catalog text columns are nullable on purpose: readers rely on NULL = missing
+    "DJ008",   # __str__ only where the admin lists the model
+    "RUF001",  # Cyrillic and Japanese text is intentional
+    "RUF002",
+]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main", "pydantic.mypy"]
+ignore_missing_imports = true
+check_untyped_defs = true
+exclude = ["migrations/", "tests/"]
+
+[tool.django-stubs]
+django_settings_module = "ingest.settings"

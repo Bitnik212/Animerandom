@@ -1,0 +1,137 @@
+# Local stack. See README.md for the startup order.
+# The api and rec-engine services are added here when those services exist.
+
+x-ingest: &ingest
+  build:
+    context: .
+    dockerfile: services/ingest-worker/Dockerfile
+    target: base
+  image: anime-picker/ingest-worker:dev
+  env_file: .env
+  environment: &ingest-env
+    POSTGRES_URL: postgresql://ingest_svc:${INGEST_DB_PASSWORD}@postgres:5432/anime
+    REDIS_URL: redis://redis:6379/0
+    CELERY_BROKER_URL: redis://redis:6379/1
+    ELASTICSEARCH_URL: http://elasticsearch:9200
+    ES_INDEX_DEFINITION: /app/infra/elasticsearch/anime-index.json
+    KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+    FLOWER_URL: http://localhost:5555
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_DB: anime
+      INGEST_DB_PASSWORD: ${INGEST_DB_PASSWORD}
+      API_DB_PASSWORD: ${API_DB_PASSWORD}
+      REC_DB_PASSWORD: ${REC_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER} -d anime"]
+      interval: 5s
+      retries: 20
+
+  elasticsearch:
+    build:
+      context: infra/elasticsearch
+      args: { ES_VERSION: "${ES_VERSION}" }
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms2g -Xmx2g
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports: ["9200:9200"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      retries: 30
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:${KC_VERSION}
+    command: start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_ADMIN_USER}
+      KC_DB_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      KC_HOSTNAME: ${KC_HOSTNAME}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD}
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+    ports: ["8180:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # One-shot: schemas catalog + ingest, id map snapshot, vocabulary.
+  # Must finish before the api and rec-engine start (their FKs point into catalog).
+  ingest-migrate:
+    <<: *ingest
+    command: >
+      sh -c "python manage.py migrate --database=catalog &&
+             python manage.py migrate &&
+             python manage.py ingest_idmap --manami &&
+             python manage.py ingest_vocab"
+    restart: "no"
+
+  ingest-web:
+    <<: *ingest
+    ports: ["8082:8082"]
+    depends_on:
+      ingest-migrate: { condition: service_completed_successfully }
+
+  ingest-worker:
+    <<: *ingest
+    command: >
+      celery -A ingest worker -l info
+      -Q pipeline,source.anilist,source.shikimori,source.annict,index
+    depends_on:
+      ingest-migrate: { condition: service_completed_successfully }
+      elasticsearch: { condition: service_healthy }
+
+  ingest-beat:
+    <<: *ingest
+    command: celery -A ingest beat -l info -S django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      ingest-migrate: { condition: service_completed_successfully }
+
+  flower:
+    <<: *ingest
+    command: celery -A ingest flower --port=5555
+    ports: ["5555:5555"]
+    profiles: ["tools"]
+
+  # docker compose run --rm ingest-test   (connects as the admin role: it creates the test database)
+  ingest-test:
+    <<: *ingest
+    build:
+      context: .
+      dockerfile: services/ingest-worker/Dockerfile
+      target: test
+    image: anime-picker/ingest-worker:test
+    environment:
+      <<: *ingest-env
+      POSTGRES_URL: postgresql://${POSTGRES_ADMIN_USER}:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/anime
+    command: pytest
+    profiles: ["test"]
+
+volumes:
+  pgdata:
+  esdata:

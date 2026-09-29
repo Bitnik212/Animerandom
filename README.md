@@ -59,6 +59,15 @@ anime-picker/
 └── clients/                   not started yet (Android, web, or bot)
 ```
 
+## Status
+
+| Part | State |
+|---|---|
+| `services/ingest-worker` | Implemented: pipeline, admin, internal API, tests. Machine translation and Testcontainers tests are still open (see its README). |
+| `infra` | Postgres init, Elasticsearch image and index mapping. The Keycloak realm export is still missing. |
+| `services/api`, `services/rec-engine` | Design only (their READMEs); not in `docker-compose.yml` yet. |
+| `clients` | Not started. |
+
 ## Services
 
 | Service | Language | Responsibility | Writes to | Docs |

@@ -46,7 +46,7 @@ The ingest worker owns two schemas in the shared `anime` database and migrates b
 | Schema | Django connection alias | Contents |
 |---|---|---|
 | `catalog` | `catalog` | The anime data: `anime`, `anime_localization`, synonyms, genres, tags, studios, relations, `raw_source_record`, `anime_override` |
-| `ingest` | `default` | Django internals (admin users, sessions, content types), Celery beat schedules and task results, `IngestRun`, `RunStage` |
+| `ingest` | `default` | Django internals (admin users, sessions, content types), Celery beat schedules and task results, `IngestRun`, `RunStage`, `RunItemError`, `RunAnime`, and the id-mapping tables `IdMapping`, `IdSourceEntry` |
 
 Both aliases point to the same database with a different `search_path` (`catalog, public` and `ingest, public`), and `ingest/db_router.py` sends the `catalog` app to the `catalog` alias and everything else to `default`. Each schema gets its own `django_migrations` table.
 
@@ -69,7 +69,8 @@ The API and the rec engine read `catalog` directly (read-only, enforced by their
 
 ```
 services/ingest-worker/
-├── pyproject.toml
+├── pyproject.toml, uv.lock
+├── Dockerfile                     build context is the repo root (reads infra/elasticsearch)
 ├── manage.py
 ├── contract/
 │   └── catalog-schema.sql         schema-only dump of `catalog`, read by other services' tests
@@ -77,23 +78,32 @@ services/ingest-worker/
 │   ├── settings.py                django-environ, both DB aliases (same DB, different search_path), Celery config
 │   ├── celery.py                  Celery app, queues, routes
 │   ├── db_router.py               catalog app → `catalog` alias, everything else → `default`
-│   ├── api.py                     NinjaAPI instance, JWT auth, router mounting
+│   ├── api.py                     NinjaAPI instance and every internal endpoint
+│   ├── auth.py                    Keycloak JWT validation, problem+json errors
 │   └── asgi.py
 ├── catalog/                       models and migrations for schema `catalog` + admin
 │   ├── models.py
 │   └── admin.py
-├── runs/                          IngestRun, RunStage models, ninja routes, admin
-├── pipeline/
-│   ├── tasks.py                   Celery tasks, one per stage
+├── runs/                          IngestRun, RunStage, RunItemError, RunAnime; admin; commands
+│   ├── services.py                run lock, stage status and counters, item errors
+│   ├── contract.py                catalog contract dump
+│   └── management/commands/       ingest_* and dump_catalog_contract
+├── pipeline/                      Django app too: IdMapping, IdSourceEntry (schema ingest)
+│   ├── tasks.py                   Celery tasks: thin wrappers with the retry rules
+│   ├── stages.py                  stage logic as plain functions (what tests call)
 │   ├── orchestration.py           builds the Celery canvas for a run
-│   ├── http.py                    shared client: User-Agent, Redis token bucket, retries
+│   ├── http.py                    shared client: User-Agent, Redis token bucket, error classes, stats
+│   ├── raw.py                     raw_source_record upserts and payload hashes
+│   ├── vocab.py                   YAML vocabulary loading and sync
+│   ├── derived.py                 decade and length buckets (Elasticsearch and pools)
 │   ├── sources/
 │   │   ├── anilist.py
 │   │   ├── shikimori.py
 │   │   └── annict.py
 │   ├── idmap/
 │   │   ├── arm.py
-│   │   └── manami.py
+│   │   ├── manami.py
+│   │   └── mapping.py             resolves MAL and Annict ids per AniList id
 │   ├── merge/
 │   │   ├── precedence.py
 │   │   └── cleanup.py
@@ -108,9 +118,9 @@ services/ingest-worker/
 │   ├── genres.yaml
 │   └── tags.yaml
 ├── data/
-│   └── manami-snapshot.json.gz    last release before the upstream archive
+│   └── manami-snapshot.json.gz    AniList → MAL pairs from the last release before the upstream archive
 └── tests/
-    └── fixtures/                  recorded source responses
+    └── fixtures/                  source responses (see its README)
 ```
 
 ## Running
@@ -133,9 +143,11 @@ uv run python manage.py ingest_merge                  # re-merge from raw_source
 uv run python manage.py ingest_index                  # full Elasticsearch rebuild with alias swap
 uv run python manage.py ingest_pools
 uv run python manage.py ingest_vocab                  # sync YAML vocabulary into Postgres
+uv run python manage.py ingest_idmap --arm --manami   # load id cross-references (runs also do this when empty)
+uv run python manage.py dump_catalog_contract         # regenerate contract/catalog-schema.sql
 
-uv run pytest
-uv run ruff check . && uv run mypy .
+POSTGRES_URL=postgresql://<role that can CREATE DATABASE>@localhost/anime uv run pytest
+uv run ruff check . && uv run ruff format --check . && uv run mypy .
 ```
 
 From the repo root: `docker compose run --rm ingest-migrate`, then `docker compose up -d ingest-web ingest-worker ingest-beat`, then `docker compose exec ingest-web python manage.py ingest_run --full --limit 500`.
@@ -200,18 +212,42 @@ Celery's built-in `rate_limit` applies per worker process, so it isn't enough on
 A run is one Celery canvas built in `pipeline/orchestration.py`:
 
 ```
-start_run
- → group(fetch AniList pages)                       queue source.anilist
+start_run                                           sync vocab, load id maps if empty
+ → chord(fetch AniList)                             queue source.anilist
  → map_ids
- → group(fetch Shikimori batch, fetch Annict batch) queues source.shikimori / source.annict
- → chord → merge_and_localize (batches of 200)      queue pipeline
- → write_postgres
+ → chord(Shikimori shards, Annict shards)           queues source.shikimori / source.annict
+ → chord(merge_write shards, batches of 200)        queue pipeline
+ → link_relations
+ → mark_removed (full runs only)
  → index_elasticsearch                              queue index
  → rebuild_pools                                    queue index
  → finish_run
 ```
 
-Each stage updates its `RunStage` row (pending, running, done, failed, counts, timing), which is what the admin and the API show. A failed stage marks the run failed; earlier stages' output stays, and a new run skips unchanged records by payload hash.
+The canvas is fixed when the run is created, so no task has to wait for the previous
+stage to report how much work there is:
+
+- **AniList, full run:** a static partition of the id space into `ANILIST_ID_RANGE`
+  (5000) wide ranges up to 300k, plus one open-ended range above that. Each task pages
+  through its range with `id_greater`, so a retry resumes after the last stored id.
+  Empty ranges cost one request each.
+- **AniList, `--limit N`:** `ceil(N / 50)` popularity-sorted pages.
+- **AniList, incremental:** one task pages `UPDATED_AT_DESC` until it passes the
+  `INCREMENTAL_DAYS` cutoff, one pages everything `RELEASING`.
+- **Shikimori, Annict, merge:** 4 shards each, split by `anilist_id % 4`, resuming by
+  a cursor on retry.
+
+Stages find their work in `RunAnime` (one row per AniList id the run touched), not in
+task arguments. Merge, localize, and the Postgres write happen in one `merge_write`
+stage: each batch of 200 is merged in memory and written in its own transaction, so
+nothing large ever sits between two stages. `link_relations` then adds relations whose
+target arrived later than their source (from the stored AniList payloads).
+
+Each stage updates its `RunStage` row (pending, running, done, failed, counts, timing),
+which is what the admin and the API show. Item-level failures and logged conflicts go
+to `RunItemError`. A failed stage marks the run failed; earlier stages' output stays,
+and a new run skips unchanged records by merge hash (all raw payload hashes, the
+resolved ids, the overrides, and `MERGE_VERSION`; AniList's `updatedAt` is excluded).
 
 ### Schedules
 
@@ -271,7 +307,7 @@ AniList id ──(AniList's idMal)──> MAL id ──(same id)──> Shikimor
      └──────────────(arm)──────────────> Annict id
 ```
 
-`manami-snapshot.json.gz` fills gaps where AniList has no `idMal`. The snapshot is frozen because the upstream project was archived in July 2026; new anime rely on AniList and arm only. When sources disagree on a mapping, AniList's `idMal` wins and the conflict is logged on the run.
+`manami-snapshot.json.gz` fills gaps where AniList has no `idMal` (it holds only the AniList → MAL pairs from the final release). Both cross-references are loaded into `ingest.pipeline_idsourceentry`: arm by the weekly schedule, manami from the committed file. The resolved ids per anime live in `ingest.pipeline_idmapping`. The snapshot is frozen because the upstream project was archived in July 2026; new anime rely on AniList and arm only. When sources disagree on a mapping, AniList's `idMal` wins and the conflict is logged on the run.
 
 ### 3. Merge
 
@@ -303,7 +339,7 @@ Cleanup rules in `pipeline/merge/cleanup.py`:
 
 - `title.ja_latn` missing but `title.ja` present → generate with cutlet (Hepburn, foreign words kept in their English spelling), set `title_machine = true`, `title_source = 'cutlet'`. If cutlet fails, try pykakasi.
 - Nothing else is generated by default. Fallback between languages happens at read time in the API, so storage keeps only real or explicitly generated text.
-- Optional machine translation (`--translate ru,ja` on `ingest_run`) is off by default. When on, it fills `synopsis.ru` and `synopsis.ja` from English and sets `synopsis_machine = true`. Real text always replaces machine text on a later run; machine text never replaces real text.
+- Optional machine translation (`--translate ru,ja` on `ingest_run`) is off by default. When on, it fills `synopsis.ru` and `synopsis.ja` from English and sets `synopsis_machine = true`. Real text always replaces machine text on a later run; machine text never replaces real text. **Not implemented yet:** the flag doesn't exist and no provider is chosen.
 
 ### 5. Write Postgres
 
@@ -336,16 +372,40 @@ Rebuilds every `pool:*` set listed in `infra/README.md`. Each set is written to 
 
 Adding a genre or fixing a translation is a YAML edit plus `ingest_vocab`. No reindex is needed because Elasticsearch stores slugs only.
 
+`genres.yaml` covers all 19 AniList genres. `tags.yaml` is a starter set of about 60 common tags with `en`, `ru`, and `ja` names; AniList has a few hundred. Tags that aren't listed are skipped and show up on each run as `skipped` items (`tag:<name>`), which makes a good to-do list. Every run also syncs the YAML into Postgres at start. The translations were written without native review and should get one.
+
 ## Testing
 
-- Source clients are tested against recorded responses in `tests/fixtures/` with respx; tests never hit real APIs.
-- Merge and cleanup rules have table-driven tests, one case per row of the precedence table, plus override cases.
-- Task logic lives in plain functions that tasks call, so most tests call the functions directly without Celery.
-- Canvas tests run with `task_always_eager = True` to check stage order and `RunStage` updates.
-- An end-to-end test starts Postgres, Redis, and Elasticsearch in Testcontainers, runs a real Celery worker in a thread, runs the whole pipeline on 20 fixture anime, and asserts on stored rows, the alias target, and pool contents.
+- Tests run against a real Postgres and Redis: the `ingest-test` compose service
+  (`docker compose run --rm ingest-test`), or any instance given through `POSTGRES_URL`
+  and `REDIS_URL`. The Postgres role must be able to create the test database. Redis DB 15
+  is flushed around every test.
+- Source clients are tested with respx against the responses in `tests/fixtures/`; tests
+  never hit real APIs. The fixtures follow the real response shapes but were written by
+  hand, because the sources weren't reachable when they were made. Replace them with
+  recordings when you can.
+- Merge and cleanup rules have table-driven tests, one case per row of the precedence
+  table, plus override cases.
+- Stage logic lives in plain functions (`pipeline/stages.py`) that tasks call.
+- End-to-end tests run the real canvas with `task_always_eager` (propagation off, so
+  retries and `on_failure` behave as in a worker) on 6 fixture anime. They cover:
+  - stage order and `RunStage` updates
+  - stored rows, relations, conflicts, and the Elasticsearch alias target
+  - pool contents
+  - skipping unchanged records and marking removed anime
+  - overrides and cancelling a run
+  - item-level 4xx, resuming after a 429, giving up after 6 transient errors, and a
+    failing stage
+- Elasticsearch is replaced by an in-memory fake in tests. The real mapping in
+  `infra/elasticsearch/anime-index.json` is only checked against a live cluster.
 - A test fails if `makemigrations --check` finds model changes without a migration.
-- A test fails if `contract/catalog-schema.sql` differs from a fresh dump of the migrated `catalog` schema.
-- ninja endpoints are tested with signed test JWTs, including role checks.
+- A test fails if `contract/catalog-schema.sql` differs from a fresh dump of the
+  migrated `catalog` schema.
+- ninja endpoints are tested with signed test JWTs, covering each rejection rule and the
+  role check.
+
+Not done yet: Testcontainers-based tests with a real Elasticsearch, and a run on 20
+fixture anime.
 
 ## Rules
 
