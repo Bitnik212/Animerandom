@@ -91,6 +91,14 @@ object Errors {
             "Unsupported locale '$value'; use en, ru, ja or ja-Latn",
         )
 
+    fun searchUnavailable(detail: String = "") =
+        ApiException(
+            "search-unavailable",
+            HttpStatusCode.ServiceUnavailable,
+            "Search unavailable",
+            detail,
+        )
+
     fun identityProviderUnavailable(detail: String = "") =
         ApiException(
             "identity-provider-unavailable",

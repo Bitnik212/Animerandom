@@ -271,7 +271,7 @@ Everything in Redis is derived and can be rebuilt. Losing Redis costs latency, n
 | `pool:score:{n}plus` | set | ingest-worker | Score ≥ n, for n in 6, 7, 8, 9 | none |
 | `pool:decade:{decade}` | set | ingest-worker | `1990s`, `2000s`, … | none |
 | `pool:length:{bucket}` | set | ingest-worker | `short` ≤ 13 eps, `medium` 14–26, `long` > 26 | none |
-| `user:{uuid}:excluded` | set | api | Watched + not interested IDs | 24 h, rebuilt on miss |
+| `user:{uuid}:excluded` | set | api | Watched + not interested IDs, plus the sentinel `0` so an empty set still exists | 24 h, rebuilt on miss |
 | `cache:anime:{id}:{locale}` | string (JSON) | api | Localized anime card | 1 h |
 | `tmp:rand:{uuid}` | set | api | Intersection scratch space | 10 s |
 | `ratelimit:auth:*` | sorted set | api | Auth attempt timestamps (sliding window) | window length |
