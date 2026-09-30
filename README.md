@@ -66,7 +66,7 @@ anime-picker/
 | `services/ingest-worker` | Implemented: pipeline, admin, internal API, tests. Machine translation and Testcontainers tests are still open (see its README). |
 | `infra` | Postgres init, Elasticsearch image and index mapping. The Keycloak realm export is still missing. |
 | `services/rec-engine` | Implemented: embeddings, ALS, hybrid ranking, filters, reasons, nightly jobs, tests. The Docker image with the real model hasn't been built yet (see its README). |
-| `services/api` | Design only (its README); not in `docker-compose.yml` yet. Until its `app` migrations exist, the rec engine treats every user as unknown. |
+| `services/api` | In progress: foundation (config, errors, locales, `app` schema, token validation, `/meta`, health) is in. Auth, catalog, search and user features follow. |
 | `clients` | Not started. |
 
 ## Services

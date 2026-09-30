@@ -187,8 +187,7 @@ If schema `app` doesn't exist yet (the API hasn't migrated), every user is treat
 
 - Unit tests cover blending weights and normalization, reason selection, exclusions, sequel ordering, diversity, the confidence table, and the ALS user step. The user-step test checks against implicit's own `recalculate_user`. All use small in-memory fixtures.
 - Integration tests create a fresh database on the Postgres at `REC_TEST_POSTGRES_URL`. The role needs `CREATE DATABASE`, and pgvector must be installed. Setup:
-  - It enables pgvector, loads the catalog contract (`services/ingest-worker/contract/catalog-schema.sql`) and a stand-in for the `app` schema (`tests/sql/app_schema.sql`, written from `infra/README.md`), then applies this service's migrations.
-  - Swap the stand-in for the API's Flyway migrations once they exist.
+  - It enables pgvector, loads the catalog contract (`services/ingest-worker/contract/catalog-schema.sql`) and the API's Flyway migrations for `app` (`services/api/src/main/resources/db/migration/`, in version order), then applies this service's migrations.
   - The catalog is synthetic: 60 anime in 6 genre clusters, a sequel chain, and one adult and one removed title, plus 80 synthetic users.
   - A deterministic bag-of-words embedder stands in for the real model, so tests never download one.
 - They cover:

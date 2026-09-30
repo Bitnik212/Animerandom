@@ -1,5 +1,4 @@
 # Local stack. See README.md for the startup order.
-# The api service is added here when it exists.
 
 x-ingest: &ingest
   build:
@@ -144,6 +143,24 @@ services:
     ports: ["8081:8081"]
     depends_on:
       ingest-migrate: { condition: service_completed_successfully }
+
+  api:
+    build: services/api
+    image: anime-picker/api:dev
+    environment:
+      POSTGRES_URL: postgresql://api_svc:${API_DB_PASSWORD}@postgres:5432/anime
+      REDIS_URL: redis://redis:6379/0
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      REC_ENGINE_URL: http://rec-engine:8081
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+    ports: ["8080:8080"]
+    depends_on:
+      ingest-migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
 
 volumes:
   pgdata:

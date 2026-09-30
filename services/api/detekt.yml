@@ -1,0 +1,22 @@
+style:
+  MaxLineLength:
+    maxLineLength: 120
+  MagicNumber:
+    active: false
+  ReturnCount:
+    max: 4
+  ForbiddenComment:
+    active: false
+complexity:
+  LongParameterList:
+    functionThreshold: 8
+    constructorThreshold: 10
+  TooManyFunctions:
+    thresholdInFiles: 25
+    thresholdInClasses: 25
+    thresholdInObjects: 25
+  LongMethod:
+    threshold: 80
+exceptions:
+  TooGenericExceptionCaught:
+    active: false
