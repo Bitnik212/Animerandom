@@ -314,17 +314,17 @@ Details and Keycloak calls are in the Authentication section above.
 
 | Method and path | Purpose |
 |---|---|
-| `GET /users/me` | Profile: `id`, `email`, `displayName`, `roles`, `locale`, `showAdult` |
+| `GET /users/me` | Profile: `id`, `email` and `roles` (`user`, `admin`) from the token; `displayName`, `locale` (BCP 47 tag), `showAdult`, `onboardingCompleted`, `likedGenres`, `dislikedGenres` from `app_user` |
 | `PUT /users/me/password` | Change password, see Authentication |
-| `PATCH /users/me` | Update `displayName`, `showAdult`, and `locale` (only `locale` is also synced to Keycloak, for emails) |
+| `PATCH /users/me` | Update `displayName`, `showAdult`, and `locale`; returns the profile. Absent fields stay as they are, and `displayName: null` (or blank) clears it. Other fields are `400`. Only `locale` is also synced to Keycloak, for emails. Keycloak is updated first, so a failure is `502` with nothing changed |
 | `DELETE /users/me` | Delete the account in the app and in Keycloak, returns `204` |
 | `POST /users/me/logout-all` | End every Keycloak session of the user, returns `204` |
-| `POST /users/me/onboarding` | `{ "favorites": [ids], "likedGenres": [], "dislikedGenres": [] }`; favorites are stored as `completed` with score 9 |
-| `GET /users/me/anime?status=planned&sort=added` | The user's list; `sort` is `added`, `score`, `length` |
-| `PUT /users/me/anime/{animeId}` | `{ "status": "completed", "score": 8 }`; `score` optional |
-| `DELETE /users/me/anime/{animeId}` | Remove from list |
-| `POST /users/me/feedback` | `{ "animeId": 1024, "kind": "not_interested" }` or `"skipped"` (sent on reroll) |
-| `GET /users/me/recommendations?limit=20` | Personal feed |
+| `POST /users/me/onboarding` | `{ "favorites": [ids], "likedGenres": [], "dislikedGenres": [] }`, returns `204`. Favorites (at most 50, all must exist) are stored as `completed` with score 9. Genre slugs must exist, and none can be both liked and disliked. Preferences replace earlier ones and mark onboarding complete. |
+| `GET /users/me/anime?status=planned&sort=added` | The user's list as `{ "items": [short cards], "total", "page", "size" }`. `sort` is `added` (newest first, the default), `score` (unrated last), or `length` (episodes, fewest first). Paged with `page` and `size`. |
+| `PUT /users/me/anime/{animeId}` | `{ "status": "completed", "score": 8 }`; `score` optional (1–10), and not allowed with `planned`, since the rec engine would count it as a like. Creates or replaces the entry and returns the short card with the new `userStatus`/`userScore` |
+| `DELETE /users/me/anime/{animeId}` | Remove from list, `204` (also when it wasn't listed) |
+| `POST /users/me/feedback` | `{ "animeId": 1024, "kind": "not_interested" }` or `"skipped"` (sent on reroll), returns `204` |
+| `GET /users/me/recommendations?limit=20` | Personal feed, `{ "items": [recommendation] }`, `limit` 1–50 |
 
 ### Admin
 
@@ -341,6 +341,10 @@ Recommendation items are cards plus a localized reason:
 ```json
 { "card": { /* short card */ }, "reason": { "code": "similar_to", "text": "Потому что вам понравилось «Врата Штейна»", "animeId": 9253 } }
 ```
+
+`reason` has `animeId` for `similar_to` and `genre` (slug) for `popular_in_genre`.
+
+List changes and `not_interested` feedback update `user:{id}:excluded` right away. A title leaves the set only when it is neither watched nor rejected.
 
 ### Operations
 
@@ -378,7 +382,11 @@ The API calls the rec engine, then hydrates and localizes results:
 1. `GET {REC_ENGINE_URL}/v1/recommendations/{userId}?limit={limit}` with `REC_ENGINE_TIMEOUT_MS`.
 2. Load cards for the returned IDs in one query, keeping the engine's order.
 3. Turn each reason code into text using `messages/` bundles, filling in the referenced anime's title in the user's locale.
-4. On timeout or error, fall back to the most popular non-excluded titles in the user's liked genres (or overall), with reason code `popular`. The client never sees an error for this endpoint because of the rec engine.
+4. On timeout, error, or an unreadable answer, fall back to the most popular titles with reason code `popular`. The client never sees an error for this endpoint because of the rec engine.
+   - Titles in the user's onboarding `likedGenres` come first, then the rest.
+   - Never included: anything in the user's list, rejected titles, `dislikedGenres`, `REMOVED`, or adult titles without `showAdult`.
+
+IDs the engine returns that no longer exist are dropped. A reason code this version doesn't know is shown as `popular`, so new codes can ship in the engine first. A `similar_to` whose referenced anime can't be found is also shown as `popular`.
 
 `GET /anime/{id}/similar` calls `GET {REC_ENGINE_URL}/v1/similar/{id}?limit={limit}` and adds `includeAdult=true` only for a signed-in user with `showAdult`; by default the engine leaves adult titles out.
 
@@ -444,6 +452,13 @@ Mapped in `errors/`. Stable `type` values:
     - `503` when Elasticsearch is down
     - validation
   - search: the text query, the locale boost, post-filters and facet filters, paging, sorting, `hideWatched`, localized facets, and suggest
+- User tests cover:
+  - the profile from the token and `app_user`
+  - PATCH: partial updates, clearing `displayName`, the locale synced to Keycloak first, and nothing changed when Keycloak fails
+  - onboarding and its validation
+  - list CRUD with the exclusion set kept in step (including a title that is both planned and rejected)
+  - list paging, status filter and sorts
+- Recommendation tests cover engine order and missing IDs, reason texts in Russian, unknown codes, and the fallback (liked genres first, disliked and listed titles left out) on errors and timeouts.
 - Not done yet: Testcontainers (tests use externally provided services), a real Keycloak and a real Elasticsearch in CI (the search tests check the query JSON the API sends, not Elasticsearch's ranking).
 
 ## Rules

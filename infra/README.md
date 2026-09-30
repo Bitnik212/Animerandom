@@ -140,7 +140,7 @@ Django's own tables (admin users, sessions, content types), Celery beat schedule
 
 | Table | Purpose | Key columns |
 |---|---|---|
-| `app_user` | Everything about a user except credentials | `id uuid pk` (= Keycloak `sub`), `display_name`, `locale`, `show_adult bool default false`, `onboarding_completed_at`, `last_seen_at`, `created_at`; created at sign-up (or on the first authenticated request if missing) |
+| `app_user` | Everything about a user except credentials | `id uuid pk` (= Keycloak `sub`), `display_name`, `locale`, `show_adult bool default false`, `onboarding_completed_at`, `last_seen_at`, `created_at`, `liked_genres text[]` and `disliked_genres text[]` (genre slugs from onboarding, not foreign keys); created at sign-up (or on the first authenticated request if missing) |
 | `user_anime` | Watch status and rating | pk `(user_id, anime_id)`, `anime_id` references `catalog.anime`, `status` in `planned, watching, completed, dropped`, `score smallint` 1–10 nullable, `updated_at` |
 | `user_feedback` | Negative and implicit signals | `user_id`, `anime_id`, `kind` in `not_interested, skipped`, `created_at` |
 

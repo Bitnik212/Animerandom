@@ -51,10 +51,15 @@ import picker.features.ops.healthChecks
 import picker.features.ops.opsRoutes
 import picker.features.random.RandomService
 import picker.features.random.randomRoutes
+import picker.features.recommendations.RecommendationRepository
+import picker.features.recommendations.RecommendationService
+import picker.features.recommendations.recommendationRoutes
 import picker.features.search.SearchService
 import picker.features.search.searchRoutes
 import picker.features.users.Exclusions
 import picker.features.users.UserRepository
+import picker.features.users.UsersService
+import picker.features.users.userRoutes
 import picker.i18n.AppLocale
 import picker.infra.db.Db
 import picker.infra.es.Es
@@ -105,6 +110,9 @@ fun appModule(config: AppConfig): Module =
         single { AnimeService(get(), get(), get(), get(), get()) }
         single { RandomService(get(), get(), get(), get(), get()) }
         single { SearchService(get(), get(), get(), get(), get()) }
+        single { RecommendationRepository(get()) }
+        single { RecommendationService(get(), get(), get(), get(), get()) }
+        single { UsersService(get(), get(), get(), get(), get(), get()) }
         single<List<HealthCheck>> {
             healthChecks(get(), get(), get(), config.elasticsearchUrl, config.keycloak.certsUrl, config.recEngineUrl)
         }
@@ -161,6 +169,8 @@ fun Application.configure(config: AppConfig, overrides: Module? = null) {
             }
             protectedRoutes(provisioner) {
                 accountRoutes(get())
+                userRoutes(get(), users, defaultLocale)
+                recommendationRoutes(get(), users, defaultLocale)
                 adminRoutes(get())
             }
         }
