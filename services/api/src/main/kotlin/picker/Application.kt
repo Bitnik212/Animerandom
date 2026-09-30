@@ -26,11 +26,20 @@ import org.koin.ktor.ext.get
 import org.koin.ktor.plugin.KoinIsolated
 import picker.auth.AUTH_USER
 import picker.auth.AppUserProvisioner
+import picker.auth.DeletedAccounts
 import picker.auth.EnsureAppUser
+import picker.auth.KeycloakClient
+import picker.auth.RateLimiter
+import picker.auth.UserPrincipal
 import picker.auth.installTokenValidation
 import picker.auth.keycloakJwks
 import picker.config.AppConfig
 import picker.errors.installProblems
+import picker.features.auth.AccountService
+import picker.features.auth.AuthService
+import picker.features.auth.accountRoutes
+import picker.features.auth.adminRoutes
+import picker.features.auth.authRoutes
 import picker.features.meta.MetaRepository
 import picker.features.meta.MetaService
 import picker.features.meta.metaRoutes
@@ -74,6 +83,11 @@ fun appModule(config: AppConfig): Module =
         single { UserRepository(get()) }
         single { MetaRepository(get()) }
         single { MetaService(get()) }
+        single { KeycloakClient(config.keycloak, get()) }
+        single { RateLimiter(get()) }
+        single { DeletedAccounts(get()) }
+        single { AuthService(config, get(), get(), get(), AppLocale.fromTag(config.defaultLocale) ?: AppLocale.EN) }
+        single { AccountService(config, get(), get(), get(), get(), get()) }
         single<List<HealthCheck>> {
             healthChecks(get(), get(), get(), config.elasticsearchUrl, config.keycloak.certsUrl, config.recEngineUrl)
         }
@@ -103,7 +117,15 @@ fun Application.configure(config: AppConfig, overrides: Module? = null) {
 
     val defaultLocale = AppLocale.fromTag(config.defaultLocale) ?: AppLocale.EN
     val users = get<UserRepository>()
-    val provisioner = AppUserProvisioner { principal -> users.ensure(principal.id, defaultLocale.key) }
+    val deleted = get<DeletedAccounts>()
+    val provisioner =
+        object : AppUserProvisioner {
+            override suspend fun ensure(principal: UserPrincipal) {
+                users.ensure(principal.id, defaultLocale.key)
+            }
+
+            override suspend fun isDeleted(userId: UUID) = deleted.isDeleted(userId)
+        }
 
     // Close through direct references: the container may already be stopped by then.
     val closeables = listOf<AutoCloseable>(get<Db>(), get<Redis>(), get<HttpClient>())
@@ -113,8 +135,13 @@ fun Application.configure(config: AppConfig, overrides: Module? = null) {
         opsRoutes(get())
         route("/v1") {
             // Public routes: a token is optional, but an invalid one is still a 401.
+            authRoutes(get())
             publicRoutes(provisioner) {
                 metaRoutes(get(), users, defaultLocale)
+            }
+            protectedRoutes(provisioner) {
+                accountRoutes(get())
+                adminRoutes(get())
             }
         }
     }

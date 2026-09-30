@@ -64,9 +64,9 @@ anime-picker/
 | Part | State |
 |---|---|
 | `services/ingest-worker` | Implemented: pipeline, admin, internal API, tests. Machine translation and Testcontainers tests are still open (see its README). |
-| `infra` | Postgres init, Elasticsearch image and index mapping. The Keycloak realm export is still missing. |
+| `infra` | Postgres init, Elasticsearch image and index mapping, Keycloak realm export. |
 | `services/rec-engine` | Implemented: embeddings, ALS, hybrid ranking, filters, reasons, nightly jobs, tests. The Docker image with the real model hasn't been built yet (see its README). |
-| `services/api` | In progress: foundation (config, errors, locales, `app` schema, token validation, `/meta`, health) is in. Auth, catalog, search and user features follow. |
+| `services/api` | In progress: foundation (config, errors, locales, `app` schema, token validation, `/meta`, health) and auth (sign-up to account deletion through Keycloak) are in. Catalog, search and user features follow. |
 | `clients` | Not started. |
 
 ## Services

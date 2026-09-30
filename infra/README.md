@@ -13,7 +13,6 @@ infra/
 │   └── anime-index.json       settings + mappings for anime_v{N}
 └── keycloak/
     ├── realm-anime-picker.json   realm export, imported on first start
-    └── themes/anime-picker/      email templates in the app languages
 ```
 
 ## Local stack
@@ -61,6 +60,8 @@ All keys live in `.env` (copy from `.env.example`).
 | `KC_HOSTNAME` | `http://localhost:8180` | keycloak; fixes the `iss` claim of every token |
 | `KC_DB_URL` | `jdbc:postgresql://postgres:5432/keycloak` | keycloak |
 | `KC_BOOTSTRAP_ADMIN_USERNAME`, `KC_BOOTSTRAP_ADMIN_PASSWORD` | `admin` / `admin` | keycloak master admin, for the admin console only |
+| `KEYCLOAK_CLIENT_SECRET` | `dev-only-change-me` | keycloak (realm import) and api; secret of the `anime-picker-api` client |
+| `KC_SMTP_HOST`, `KC_SMTP_PORT` | `mailpit` / `1025` | keycloak (realm import); where account emails go |
 | `KEYCLOAK_*` | see `services/api/README.md` | api |
 
 ## Postgres
@@ -229,11 +230,12 @@ Defined in `keycloak/realm-anime-picker.json` and imported on first start. Chang
 | Password policy | Length 8+, not username, not email |
 | Brute-force detection | On (per-user lockout after repeated failures) |
 | Realm roles | `user` (default role), `admin` |
+| User profile | Only `username` and `email`. Keycloak 26's default profile requires first and last name, which would block every password grant with "Account is not fully set up"; the app keeps display names in `app_user` |
 | Access token lifespan | 5 minutes |
 | SSO session idle / max | 30 days / 90 days (refresh tokens stay valid this long, mobile-friendly) |
-| SMTP | Required for forgot-password and verify-email; any dev mail catcher works locally |
+| SMTP | Required for forgot-password and verify-email. Host and port come from `KC_SMTP_HOST` / `KC_SMTP_PORT` at import; locally that's the `mailpit` container (inbox at http://localhost:8025) |
 | Internationalization | On; supported `en`, `ru`, `ja`; used for emails only |
-| Email theme | `anime-picker` |
+| Email theme | Keycloak's built-in theme for now; a custom `anime-picker` theme with a romanized Japanese bundle is not written yet |
 
 ### Client `anime-picker-api`
 
@@ -241,7 +243,7 @@ The only client in the realm.
 
 | Setting | Value |
 |---|---|
-| Client authentication | On (confidential, secret in `KEYCLOAK_CLIENT_SECRET`) |
+| Client authentication | On (confidential). The export holds `${KEYCLOAK_CLIENT_SECRET}`, which Keycloak fills from its environment on import, so the secret never lives in the repo and both sides read the same `.env` value |
 | Standard flow | Off |
 | Direct access grants | On (password grant for sign-in) |
 | Service account | On, with `realm-management/view-users` and `realm-management/manage-users` only |
@@ -255,7 +257,7 @@ Tokens carry `iss = {KC_HOSTNAME}/realms/anime-picker`. Because `KC_HOSTNAME` is
 
 ### Languages
 
-The app's own screens cover all four languages, so sign-in and sign-up are fully localized regardless of Keycloak. Keycloak's language only affects emails (password reset, verification). Built-in email texts exist for English, Russian, and Japanese; the `anime-picker` theme adds a romanized Japanese bundle. If the pinned Keycloak version doesn't accept a script-subtag locale for that bundle, `ja-Latn` users get Japanese emails. The API keeps each user's `locale` attribute in sync.
+The app's own screens cover all four languages, so sign-in and sign-up are fully localized regardless of Keycloak. Keycloak's language only affects emails (password reset, verification). Built-in email texts exist for English, Russian, and Japanese; a planned `anime-picker` theme would add a romanized Japanese bundle; until then `ja-Latn` users get Japanese emails. The API keeps each user's `locale` attribute in sync.
 
 ## Redis
 
@@ -272,7 +274,8 @@ Everything in Redis is derived and can be rebuilt. Losing Redis costs latency, n
 | `user:{uuid}:excluded` | set | api | Watched + not interested IDs | 24 h, rebuilt on miss |
 | `cache:anime:{id}:{locale}` | string (JSON) | api | Localized anime card | 1 h |
 | `tmp:rand:{uuid}` | set | api | Intersection scratch space | 10 s |
-| `ratelimit:auth:*` | string | api | Sign-in and sign-up attempt counters | window length |
+| `ratelimit:auth:*` | sorted set | api | Auth attempt timestamps (sliding window) | window length |
+| `deleted:user:{uuid}` | string | api | Tombstone of a deleted account; its still-valid tokens get `401` instead of re-creating the app row | 1 h |
 | `ratelimit:source:{name}` | hash | ingest-worker | Shared token bucket per external source | none |
 | `lock:ingest:run` | string | ingest-worker | Prevents overlapping runs | 6 h |
 

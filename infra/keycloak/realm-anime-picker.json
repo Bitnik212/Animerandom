@@ -1,0 +1,149 @@
+{
+  "realm": "anime-picker",
+  "displayName": "Anime Picker",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "editUsernameAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "verifyEmail": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 10,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "quickLoginCheckMilliSeconds": 1000,
+  "minimumQuickLoginWaitSeconds": 60,
+  "passwordPolicy": "length(8) and maxLength(256) and notUsername and notEmail",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 2592000,
+  "ssoSessionMaxLifespan": 7776000,
+  "offlineSessionIdleTimeout": 2592000,
+  "revokeRefreshToken": false,
+  "actionTokenGeneratedByUserLifespan": 3600,
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "en",
+    "ru",
+    "ja"
+  ],
+  "defaultLocale": "en",
+  "smtpServer": {
+    "host": "${KC_SMTP_HOST:mailpit}",
+    "port": "${KC_SMTP_PORT:1025}",
+    "from": "${KC_SMTP_FROM:no-reply@anime-picker.local}",
+    "fromDisplayName": "Anime Picker",
+    "auth": "false",
+    "ssl": "false",
+    "starttls": "false"
+  },
+  "roles": {
+    "realm": [
+      {
+        "name": "user",
+        "description": "Every account"
+      },
+      {
+        "name": "admin",
+        "description": "Catalog and user administration"
+      },
+      {
+        "name": "default-roles-anime-picker",
+        "description": "Roles every new user gets",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "user",
+            "offline_access"
+          ]
+        }
+      }
+    ]
+  },
+  "defaultRole": {
+    "name": "default-roles-anime-picker"
+  },
+  "clients": [
+    {
+      "clientId": "anime-picker-api",
+      "name": "Anime Picker API",
+      "description": "The API service: password and refresh grants, and the Admin API through its service account",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KEYCLOAK_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "frontchannelLogout": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "use.refresh.tokens": "true",
+        "client_credentials.use_refresh_token": "false"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "roles",
+        "email",
+        "profile",
+        "web-origins",
+        "acr"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ],
+      "protocolMappers": [
+        {
+          "name": "audience anime-picker-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "anime-picker-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-anime-picker-api",
+      "enabled": true,
+      "serviceAccountClientId": "anime-picker-api",
+      "realmRoles": [
+        "default-roles-anime-picker"
+      ],
+      "clientRoles": {
+        "realm-management": [
+          "view-users",
+          "manage-users"
+        ]
+      }
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false}],\"groups\":[]}"
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -148,7 +148,15 @@ Keycloak's `invalid_grant` becomes `401 invalid-credentials` with one generic me
 
 Keycloak's user update replaces the whole `attributes` map, so the locale sync always reads the current user, changes one key, and writes the user back.
 
-Account deletion order: delete the user's rows in one transaction (`user_anime`, `user_feedback`, `app_user`), drop `user:{id}:*` keys in Redis, then delete the Keycloak user. Every step is idempotent, so on failure the API returns `502 identity-provider-unavailable` and the client retries.
+Account deletion order:
+1. Delete the user's rows in one transaction (`user_anime`, `user_feedback`, `app_user`).
+2. Drop the `user:{id}:*` keys in Redis.
+3. Delete the Keycloak user.
+4. Set the tombstone `deleted:user:{id}` (1 h).
+
+Every step is idempotent, so on failure the API returns `502 identity-provider-unavailable` and the client retries. The tombstone matters because access tokens are validated locally and stay valid for a few minutes after deletion. Every authenticated request checks it, so such a token gets `401` instead of silently re-creating the `app_user` row.
+
+Password change verifies the current password with a password grant, then immediately logs that session out, so no orphan session is left behind. Forgot-password is rate-limited per IP and per email, so no one can flood a single inbox.
 
 ### Token validation
 
@@ -185,7 +193,7 @@ If a valid token arrives for a user with no `app_user` row (for example, a user 
 
 ### Abuse protection
 
-The API is now the only door to password checks, so it rate-limits auth endpoints in Redis (`ratelimit:auth:ip:{ip}` and `ratelimit:auth:email:{sha256(email)}`, sliding window). Over the limit → `429 too-many-attempts` with `Retry-After`. Keycloak's brute-force detection stays on as a second layer; it counts failures per user, so it still works even though every request comes from the API's address.
+The API is now the only door to password checks, so it rate-limits auth endpoints in Redis (`ratelimit:auth:ip:{ip}` and `ratelimit:auth:email:{sha256(email)}`, sliding window). Sign-in and forgot-password are limited per IP and per email, sign-up per IP. Over the limit → `429 too-many-attempts` with `Retry-After`. Keycloak's brute-force detection stays on as a second layer; it counts failures per user, so it still works even though every request comes from the API's address.
 
 ## Locale resolution
 
@@ -400,9 +408,17 @@ Mapped in `errors/`. Stable `type` values:
 
   CI provides both as service containers.
 - Keycloak's JWKS endpoint is a WireMock server with a test RSA key. Token tests break each rule in the validation table on its own: wrong `iss`, `aud` and `azp`; expired and not-yet-valid; unknown `kid`; a bad signature; ID and refresh tokens; and garbage.
+- Keycloak's token endpoint and Admin REST API are WireMock stubs too (`support/KeycloakStubs.kt`). Auth tests cover:
+  - sign-up (tokens, the verification-required path, `email-taken`, `weak-password`, local validation before any Keycloak call, and deleting the Keycloak user again when the `app_user` insert fails)
+  - every sign-in outcome, including `502` when Keycloak errors or is unreachable
+  - refresh, sign-out, and forgot-password (always `202`)
+  - per-email and per-IP rate limits with `Retry-After`
+  - password change, logout everywhere, and account deletion (Postgres rows, `user:{id}:*` keys, then the Keycloak user; retryable)
+  - the admin view and role endpoints, the locale sync keeping other attributes, and service-account token reuse
+- `RealKeycloakTest` runs the same flows end to end against a real Keycloak with the committed realm imported: signup, the password policy, the audience mapper, password change, refresh and sign-out, service-account permissions, admin view, and deletion. It's skipped unless `API_TEST_KEYCLOAK_URL` and `API_TEST_KEYCLOAK_SECRET` are set; `API_TEST_KEYCLOAK_ISSUER` defaults to `{url}/realms/anime-picker`. CI doesn't run it yet.
 - The fixture catalog (`src/test/resources/fixtures/`, 12 anime) has deliberately missing translations, to exercise the fallbacks.
 - The rec engine tests load this service's Flyway migrations for `app`, so a migration that breaks them fails their CI job too.
-- Not done yet: Testcontainers (tests use externally provided services), and the WireMock stubs for the rec engine, the Keycloak token and Admin APIs, and Elasticsearch. Those arrive with the features that use them.
+- Not done yet: Testcontainers (tests use externally provided services), a real Keycloak in CI, and the WireMock stubs for the rec engine and Elasticsearch. Those arrive with the features that use them.
 
 ## Rules
 

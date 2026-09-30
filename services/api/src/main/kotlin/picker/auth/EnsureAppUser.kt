@@ -2,12 +2,16 @@ package picker.auth
 
 import io.ktor.server.application.createRouteScopedPlugin
 import io.ktor.server.auth.AuthenticationChecked
+import picker.errors.Errors
 import java.util.Collections
 import java.util.UUID
 
 /** Creates the `app_user` row for users that have none yet (e.g. made in the Keycloak console). */
 fun interface AppUserProvisioner {
     suspend fun ensure(principal: UserPrincipal)
+
+    /** Checked on every authenticated request: a deleted account's leftover token gets a 401. */
+    suspend fun isDeleted(userId: UUID): Boolean = false
 }
 
 class EnsureAppUserConfig {
@@ -31,6 +35,7 @@ val EnsureAppUser =
             )
         on(AuthenticationChecked) { call ->
             val principal = call.userOrNull() ?: return@on
+            if (provisioner.isDeleted(principal.id)) throw Errors.unauthorized("The account was deleted")
             if (principal.id !in seen) {
                 provisioner.ensure(principal)
                 seen.add(principal.id)
